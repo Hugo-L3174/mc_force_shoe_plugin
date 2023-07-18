@@ -1,0 +1,8 @@
+# This configuration is used to run a few iterations of the controller
+MainRobot: JVRC1
+Enabled: Posture
+
+IncludeHalfSitController: false
+ClearGlobalPluginiPath: true
+Plugins: [ NewPlugin ]
+GlobalPluginPaths: ["$<TARGET_FILE_DIR:NewPlugin>"]
