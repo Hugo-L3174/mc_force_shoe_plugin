@@ -4,5 +4,5 @@ Enabled: Posture
 
 IncludeHalfSitController: false
 ClearGlobalPluginiPath: true
-Plugins: [ NewPlugin ]
-GlobalPluginPaths: ["$<TARGET_FILE_DIR:NewPlugin>"]
+Plugins: [ ForceShoePlugin ]
+GlobalPluginPaths: ["$<TARGET_FILE_DIR:ForceShoePlugin>"]
