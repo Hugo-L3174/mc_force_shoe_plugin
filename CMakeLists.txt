@@ -16,10 +16,34 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/etc/ForceShoePlugin.yaml" DESTINATION
 
 set(plugin_SRC
   src/ForceShoePlugin.cpp
+  src/cmt1.cpp
+  src/cmt2.cpp
+  src/cmt3.cpp
+  src/cmtmessage.cpp
+  src/cmtpacket.cpp
+  src/cmtscan.cpp
+  src/xsens_exception.cpp
+  src/xsens_std.cpp
+  src/xsens_time.cpp
   )
 
 set(plugin_HDR
   src/ForceShoePlugin.h
+  src/cmt1.h
+  src/cmt2.h
+  src/cmt3.h
+  src/cmtdef.h
+  src/cmtmessage.h
+  src/cmtpacket.h
+  src/cmtscan.h
+  src/pstdint.h
+  src/xsens_exception.h
+  src/xsens_fifoqueue.h
+  src/xsens_file.h
+  src/xsens_janitors.h
+  src/xsens_list.h
+  src/xsens_std.h
+  src/xsens_time.h
 )
 
 # The add_plugin macro is provided by mc_rtc
