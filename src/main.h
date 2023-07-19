@@ -1,10 +1,10 @@
 
 #include <stdio.h>		// Needed for printf etc
-#include <objbase.h>	// Needed for COM functionality
+// #include <objbase.h>	// Needed for COM functionality
 #include "cmt3.h"
 #include "xsens_list.h"
 #include "cmtscan.h"
-#include <conio.h>		// included for _getch and _kbhit
+// #include <conio.h>		// included for _getch and _kbhit
 using namespace xsens;
 #define ampGain 4.7
 

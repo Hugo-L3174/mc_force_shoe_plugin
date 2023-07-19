@@ -37,29 +37,32 @@ int main(void)
 	doHardwareScan();
 
 	// Give user a (short) chance to see hardware scan results
-	Sleep(2000);
+	// Sleep(2000);
 
 	//clear screen present & get the user output mode selection.
-	clrscr();
-	getUserInputs();
+	// clrscr();
+
+	mode = CMT_OUTPUTMODE_CALIB | CMT_OUTPUTMODE_AUXILIARY;
+	settings = CMT_OUTPUTSETTINGS_AUXILIARYMODE_FORCE | CMT_OUTPUTSETTINGS_TIMESTAMP_SAMPLECNT;
+	// getUserInputs();
 
 	// Set device to user input settings
 	doMtSettings();
 
 	// Wait for first data item(s) to arrive. In production code, you would use a callback function instead (see cmtRegisterCallback function)
-	Sleep(20);
+	// Sleep(20);
 
 	//get the placement offsets, clear the screen and write the fixed headers.
-	calcScreenOffset();
-	clrscr();
-	writeHeaders();
-	printf("Unloading...\n");
+	// calcScreenOffset();
+	// clrscr();
+	// writeHeaders();
+	// printf("Unloading...\n");
 	UnloadedFS();
 
-	printf("Unloaded voltages Left Back are G0: %.6f, G1: %.6f, G2: %.6f, G3: %.6f, G4: %.6f, G5: %.6f\n", LBUnload[0], LBUnload[1], LBUnload[2], LBUnload[3], LBUnload[4], LBUnload[5]);
-	printf("Unloaded voltages Left Front are G0: %.6f, G1: %.6f, G2: %.6f, G3: %.6f, G4: %.6f, G5: %.6f\n", LFUnload[0], LFUnload[1], LFUnload[2], LFUnload[3], LFUnload[4], LFUnload[5]);
-	printf("Unloaded voltages Right Back are G0: %.6f, G1: %.6f, G2: %.6f, G3: %.6f, G4: %.6f, G5: %.6f\n", RBUnload[0], RBUnload[1], RBUnload[2], RBUnload[3], RBUnload[4], RBUnload[5]);
-	printf("Unloaded voltages Right Front are G0: %.6f, G1: %.6f, G2: %.6f, G3: %.6f, G4: %.6f, G5: %.6f\n", RFUnload[0], RFUnload[1], RFUnload[2], RFUnload[3], RFUnload[4], RFUnload[5]);
+	// printf("Unloaded voltages Left Back are G0: %.6f, G1: %.6f, G2: %.6f, G3: %.6f, G4: %.6f, G5: %.6f\n", LBUnload[0], LBUnload[1], LBUnload[2], LBUnload[3], LBUnload[4], LBUnload[5]);
+	// printf("Unloaded voltages Left Front are G0: %.6f, G1: %.6f, G2: %.6f, G3: %.6f, G4: %.6f, G5: %.6f\n", LFUnload[0], LFUnload[1], LFUnload[2], LFUnload[3], LFUnload[4], LFUnload[5]);
+	// printf("Unloaded voltages Right Back are G0: %.6f, G1: %.6f, G2: %.6f, G3: %.6f, G4: %.6f, G5: %.6f\n", RBUnload[0], RBUnload[1], RBUnload[2], RBUnload[3], RBUnload[4], RBUnload[5]);
+	// printf("Unloaded voltages Right Front are G0: %.6f, G1: %.6f, G2: %.6f, G3: %.6f, G4: %.6f, G5: %.6f\n", RFUnload[0], RFUnload[1], RFUnload[2], RFUnload[3], RFUnload[4], RFUnload[5]);
 	// Initialize packet for data
 	Packet* packet = new Packet((unsigned short)mtCount, cmt3.isXm());
 	while(!userQuit && res == XRV_OK  /* && sdata < 20 */ )
@@ -70,8 +73,8 @@ int main(void)
 		//get sample count, goto position & display.
 		sdata = packet->getSampleCounter();
 
-		gotoxy(0,0);
-		printf("Sample Counter %05hu\n", sdata);
+		// gotoxy(0,0);
+		// printf("Sample Counter %05hu\n", sdata);
 		/*printf("total message size is : %d\n", packet->m_msg.getTotalMessageSize());
 		printf("message size without headers is : %d\n", packet->m_msg.getDataSize());
 		printf("number of data items in the message: %d\n", packet->m_itemCount);
@@ -117,28 +120,28 @@ int main(void)
 		computeForceVec();
 
 		
-		gotoxy(0, 5 + 0 * screenSensorOffset);
-		printf("%.6f\t%.6f\t%.6f", LBforcevec[0], LBforcevec[1], LBforcevec[2]);
-		gotoxy(0, 7 + 0 * screenSensorOffset);
-		printf("%.6f\t%.6f\t%.6f", LBforcevec[3], LBforcevec[4], LBforcevec[5]);
+		// gotoxy(0, 5 + 0 * screenSensorOffset);
+		// printf("%.6f\t%.6f\t%.6f", LBforcevec[0], LBforcevec[1], LBforcevec[2]);
+		// gotoxy(0, 7 + 0 * screenSensorOffset);
+		// printf("%.6f\t%.6f\t%.6f", LBforcevec[3], LBforcevec[4], LBforcevec[5]);
 
 
-		gotoxy(0, 5 + 1 * screenSensorOffset);
-		printf("%.6f\t%.6f\t%.6f", LFforcevec[0], LFforcevec[1], LFforcevec[2]);
-		gotoxy(0, 7 + 1 * screenSensorOffset);
-		printf("%.6f\t%.6f\t%.6f", LFforcevec[3], LFforcevec[4], LFforcevec[5]);
-
-		
-		gotoxy(0, 5 + 2 * screenSensorOffset);
-		printf("%.6f\t%.6f\t%.6f", RBforcevec[0], RBforcevec[1], RBforcevec[2]);
-		gotoxy(0, 7 + 2 * screenSensorOffset);
-		printf("%.6f\t%.6f\t%.6f", RBforcevec[3], RBforcevec[4], RBforcevec[5]);
+		// gotoxy(0, 5 + 1 * screenSensorOffset);
+		// printf("%.6f\t%.6f\t%.6f", LFforcevec[0], LFforcevec[1], LFforcevec[2]);
+		// gotoxy(0, 7 + 1 * screenSensorOffset);
+		// printf("%.6f\t%.6f\t%.6f", LFforcevec[3], LFforcevec[4], LFforcevec[5]);
 
 		
-		gotoxy(0, 5 + 3 * screenSensorOffset);
-		printf("%.6f\t%.6f\t%.6f", RFforcevec[0], RFforcevec[1], RFforcevec[2]);
-		gotoxy(0, 7 + 3 * screenSensorOffset);
-		printf("%.6f\t%.6f\t%.6f", RFforcevec[3], RFforcevec[4], RFforcevec[5]);
+		// gotoxy(0, 5 + 2 * screenSensorOffset);
+		// printf("%.6f\t%.6f\t%.6f", RBforcevec[0], RBforcevec[1], RBforcevec[2]);
+		// gotoxy(0, 7 + 2 * screenSensorOffset);
+		// printf("%.6f\t%.6f\t%.6f", RBforcevec[3], RBforcevec[4], RBforcevec[5]);
+
+		
+		// gotoxy(0, 5 + 3 * screenSensorOffset);
+		// printf("%.6f\t%.6f\t%.6f", RFforcevec[0], RFforcevec[1], RFforcevec[2]);
+		// gotoxy(0, 7 + 3 * screenSensorOffset);
+		// printf("%.6f\t%.6f\t%.6f", RFforcevec[3], RFforcevec[4], RFforcevec[5]);
 
 
 
@@ -150,8 +153,8 @@ int main(void)
 			}	
 		}				
 
-		if (_kbhit())
-			userQuit = 1;
+		// if (_kbhit())
+		// 	userQuit = 1;
 	}
 
 	delete packet;
@@ -190,8 +193,8 @@ void UnloadedFS()
 		}
 		
 
-		if (_kbhit())
-			userQuit = 1;
+		// if (_kbhit())
+		// 	userQuit = 1;
 	}
 
 	for (int i = 0; i < 6; i++)
@@ -280,7 +283,7 @@ void doHardwareScan()
 	unsigned long portCount = 0;
 
 	printf("Scanning for connected Xsens devices...");
-	xsens::cmtScanPorts(portInfo);
+	xsens::cmtScanPorts(portInfo,0,1000,1);
 	portCount = portInfo.length();
 	printf("done\n");
 
@@ -291,16 +294,22 @@ void doHardwareScan()
 
 	for(int i = 0; i < (int)portCount; i++) {	
 		printf("Using COM port %d at %d baud\n\n",
-			(long) portInfo[i].m_portNr, portInfo[i].m_baudrate);	
+			(long) portInfo[i].m_portName, portInfo[i].m_baudrate);	
 	}
 
 	printf("Opening ports...");
 	//open the port which the device is connected to and connect at the device's baudrate.
 	for(int p = 0; p < (int)portCount; p++){
-		res = cmt3.openPort(portInfo[p].m_portNr, portInfo[p].m_baudrate);
+		res = cmt3.openPort(portInfo[p].m_portName, portInfo[p].m_baudrate);
 		EXIT_ON_ERROR(res,"cmtOpenPort");  
 	}
 	printf("done\n\n");
+
+	//set the measurement timeout to 100ms (default is 16ms)
+	int timeOut = 100;
+	res = cmt3.setTimeoutMeasurement(timeOut);
+	EXIT_ON_ERROR(res, "set measurement timeout");
+	printf("Measurement timeout set to %d ms\n", timeOut);
 
 	//get the Mt sensor count.
 	printf("Retrieving MotionTracker count (excluding attached Xbus Master(s))\n");
@@ -321,6 +330,7 @@ void doHardwareScan()
 // getUserInputs
 //
 // Request user for output data
+// This function is useless here in the plugin
 void getUserInputs()
 {
 	mode = 7;
@@ -558,13 +568,13 @@ void exitFunc(void)
 	// Close any open COM ports
 	cmt3.closePort();
 	
-	// get rid of keystrokes before we post our message
-	while (_kbhit()) _getch();
+	// // get rid of keystrokes before we post our message
+	// while (_kbhit()) _getch();
 
-	// wait for a keypress
-	if (!userQuit)
-	{
-		printf("Press a key to exit\n");
-		_getch();
-	}
+	// // wait for a keypress
+	// if (!userQuit)
+	// {
+	// 	printf("Press a key to exit\n");
+	// 	_getch();
+	// }
 }
