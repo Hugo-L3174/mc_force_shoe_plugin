@@ -1,1 +1,3 @@
 ---
+comPort: "/dev/ttyUSB0"
+baudrate: 921600

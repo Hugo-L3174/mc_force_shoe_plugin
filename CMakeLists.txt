@@ -47,6 +47,7 @@ set(plugin_HDR
 )
 
 # The add_plugin macro is provided by mc_rtc
+option(AUTOLOAD_XsensPlugin_PLUGIN "Automatically load ${PLUGIN_NAME} plugin" OFF)
 add_plugin(ForceShoePlugin "${plugin_SRC}" "${plugin_HDR}")
 
 if(BUILD_TESTING)
