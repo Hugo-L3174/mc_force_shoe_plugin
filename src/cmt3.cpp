@@ -1553,7 +1553,7 @@ XsensResultValue Cmt3::getXmOutputMode(uint8_t& mode)
 // Place all connected sensors into Configuration Mode.
 XsensResultValue Cmt3::gotoConfig(void)
 {
-	CMT3LOG(__FUNCTION__ " port %u\n",(uint32_t)m_serial.getCmt1s()->getPortNr());
+	CMT3LOG(__FUNCTION__ /*printf(*/" port %u\n",(uint32_t)m_serial.getCmt1s()->getPortNr());
 	CMT3EXITLOG;
 
 	Message snd(CMT_MID_GOTOCONFIG);
@@ -1567,13 +1567,14 @@ XsensResultValue Cmt3::gotoConfig(void)
 	while (tries++ < m_gotoConfigTries)
 	{
 		m_serial.getCmt1s()->flushData();			// special case for goto config. we want the buffer to be empty
-		CMT3LOG(__FUNCTION__ " Attempt to goto config %d\n",tries);
+		CMT3LOG(__FUNCTION__ /*printf(*/" Attempt to goto config %d\n",tries);
 		m_serial.writeMessage(&snd);
 		m_lastResult = m_serial.waitForMessage(&rcv,CMT_MID_GOTOCONFIGACK,0,false);
-#ifndef _PRODUCTION // Production version must retry on nodata, normal versions do not.
-		if (m_lastResult == XRV_TIMEOUTNODATA)
-			break;
-#endif
+// this timeout was the reason it did not work on linux at first
+// #ifndef _PRODUCTION // Production version must retry on nodata, normal versions do not.
+// 		if (m_lastResult == XRV_TIMEOUTNODATA)
+// 			break;
+// #endif
 		if (m_lastResult == XRV_OK)
 		{
 			if (m_logging)
@@ -1587,11 +1588,11 @@ XsensResultValue Cmt3::gotoConfig(void)
 					getDeviceId(biddy,m_lastHwErrorDeviceId);
 				}
 				m_lastResult = m_lastHwError = (XsensResultValue) rcv.getDataByte(0);
-				CMT3LOG(__FUNCTION__ " Goto config failed, error received %d: %s\n",(int32_t)m_lastResult,xsensResultText(m_lastResult));
+				CMT3LOG(__FUNCTION__ /*printf(*/" Goto config failed, error received %d: %s\n",(int32_t)m_lastResult,xsensResultText(m_lastResult));
 				m_serial.setTimeout(m_timeoutConf);
 				return m_lastResult;
 			}
-			CMT3LOG(__FUNCTION__ " Goto config succeeded\n");
+			CMT3LOG(__FUNCTION__ /*printf(*/" Goto config succeeded\n");
 			m_measuring = false;
 			m_serial.setTimeout(m_timeoutConf);
 			return m_lastResult = XRV_OK;
@@ -1602,7 +1603,7 @@ XsensResultValue Cmt3::gotoConfig(void)
 	m_serial.setTimeout(m_timeoutConf);
 	m_serial.getCmt1s()->flushData(); // flush buffers once more to remove any errors that are still there.
 	m_measuring = (m_lastResult != XRV_OK);
-	CMT3LOG(__FUNCTION__ " returns %d: %s\n",(int32_t)m_lastResult,xsensResultText(m_lastResult));
+	CMT3LOG(__FUNCTION__ /*printf(*/" returns %d: %s\n",(int32_t)m_lastResult,xsensResultText(m_lastResult));
 	return m_lastResult;
 }
 
@@ -1652,7 +1653,7 @@ bool Cmt3::isXm(void) const
 // Open a communication channel to the given serial port name.
 XsensResultValue Cmt3::openPort(const char *portName, const uint32_t baudRate, uint32_t readBufSize, uint32_t writeBufSize)
 {
-	CMT3LOG(__FUNCTION__ " port %s @baud %d, timeoutC=%u, timeoutM=%u\n", portName, baudRate, m_timeoutConf, m_timeoutMeas);
+	CMT3LOG(__FUNCTION__ /*printf(*/" port %s @baud %d, timeoutC=%u, timeoutM=%u\n", portName, baudRate, m_timeoutConf, m_timeoutMeas);
 	CMT3EXITLOG;
 
 	if (m_logFile.isOpen())
@@ -1665,7 +1666,7 @@ XsensResultValue Cmt3::openPort(const char *portName, const uint32_t baudRate, u
 	m_readBufSize = readBufSize;
 	m_writeBufSize = writeBufSize;
 
-	CMT3LOG(__FUNCTION__ " Low level port opened, gotoConfig\n");
+	CMT3LOG(__FUNCTION__ /*printf(*/" Low level port opened, gotoConfig\n");
 
 	m_baudrate = baudRate;
 	m_rtcInitialized = false;
@@ -1675,30 +1676,30 @@ XsensResultValue Cmt3::openPort(const char *portName, const uint32_t baudRate, u
 	// place the device in config mode
 	if (gotoConfig() != XRV_OK)
 	{
-		CMT3LOG(__FUNCTION__ " gotoConfig failed: [%d]%s\n",m_lastResult,xsensResultText(m_lastResult));
+		CMT3LOG(__FUNCTION__ /*printf(*/" gotoConfig failed: [%d]%s\n",m_lastResult,xsensResultText(m_lastResult));
 		m_serial.close();
 		return XRV_CONFIGCHECKFAIL;
 	}
 
-	CMT3LOG(__FUNCTION__ " gotoConfig succeeded, requesting initBus\n");
+	CMT3LOG(__FUNCTION__ /*printf(*/" gotoConfig succeeded, requesting initBus\n");
 	Message snd,rcv;
 
 	if (initBus() != XRV_OK)
 	{
-		CMT3LOG(__FUNCTION__ " initBus failed: [%d]%s\n",m_lastResult,xsensResultText(m_lastResult));
+		CMT3LOG(__FUNCTION__ /*printf(*/" initBus failed: [%d]%s\n",m_lastResult,xsensResultText(m_lastResult));
 		m_serial.close();
 		return XRV_CONFIGCHECKFAIL;
 	}
 
-	CMT3LOG(__FUNCTION__ " initBus succeeded, cleaning up the cache\n");
+	CMT3LOG(__FUNCTION__ /*printf(*/" initBus succeeded, cleaning up the cache\n");
 	if (refreshCache() != XRV_OK)
 	{
 		m_serial.close();
-		CMT3LOG(__FUNCTION__ " refreshCache failed: [%d]%s\n",m_lastResult,xsensResultText(m_lastResult));
+		CMT3LOG(__FUNCTION__ /*printf(*/" refreshCache failed: [%d]%s\n",m_lastResult,xsensResultText(m_lastResult));
 		return XRV_CONFIGCHECKFAIL;
 	}
 
-	CMT3LOG(__FUNCTION__ " returning OK\n");
+	CMT3LOG(__FUNCTION__ /*printf(*/" returning OK\n");
 	return m_lastResult = XRV_OK;
 }
 
