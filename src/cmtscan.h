@@ -43,7 +43,7 @@ namespace xsens {
 	Any detected devices are returned in the ports list, which is sorted by port nr.
 	
 */
-bool cmtScanPorts(List<CmtPortInfo>& ports, uint32_t baudrate = 0, uint32_t singleScanTimeout = 1000, uint32_t scanTries = 1, bool ignoreNonXsensDevices = true);
+bool cmtScanPorts(List<CmtPortInfo>& ports, uint32_t baudrate = 0, uint32_t singleScanTimeout = 100, uint32_t scanTries = 4, bool ignoreNonXsensDevices = true);
 
 /*! \brief Scan a single COM port for connected Xsens devices.
 
@@ -54,7 +54,7 @@ bool cmtScanPorts(List<CmtPortInfo>& ports, uint32_t baudrate = 0, uint32_t sing
 	in the portInfo parameter.
 	
 */
-bool cmtScanPort(CmtPortInfo& portInfo, uint32_t baudrate = 0, uint32_t singleScanTimeout = 1000, uint32_t scanTries = 1);
+bool cmtScanPort(CmtPortInfo& portInfo, uint32_t baudrate = 0, uint32_t singleScanTimeout = 100, uint32_t scanTries = 4);
 
 //! Set to true from another thread to abort any scan currently in progress.
 extern bool abortScan;
