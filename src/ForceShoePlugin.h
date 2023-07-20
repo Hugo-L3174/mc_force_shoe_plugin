@@ -148,10 +148,10 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
   {
     Packet* packet = new Packet((unsigned short)mtCount, cmt3_->isXm());
     // force unload
-    while (res == XRV_OK && sdata < 99)
+    while (res == XRV_OK && sdata_ < 99)
     {
       cmt3_->waitForDataMessage(packet);
-      sdata = packet->getSampleCounter();
+      sdata_ = packet->getSampleCounter();
       
       for (int i = 0; i < 8; i++)
       {
@@ -237,7 +237,35 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
     }
   }
 
+
+  //////////////////////////////////////////////////////////////////////////////////////////
+  // Thread to wait for message while not blocking controller
+  void dataThread(xsens::Cmt3 & cmt3_, Packet & packet_)
+  {
+    while (true)
+    {
+      cmt3_.waitForDataMessage(&packet_);
+      std::lock_guard<std::mutex> lock(mutex_);
+      sdata_ = packet_.getSampleCounter();
+
+      for (int i = 0; i < 8; i++)
+      {
+        
+        LBraw[i] = shortToVolts(packet_.m_msg.getDataShort(packet_.getInfoList(0).m_calAcc + 1 * CALIB_DATA_OFFSET + 0 * RAWFORCE_OFFSET + 2 * i));
+        LFraw[i] = shortToVolts(packet_.m_msg.getDataShort(packet_.getInfoList(0).m_calAcc + 2 * CALIB_DATA_OFFSET + 1 * RAWFORCE_OFFSET + 2 * i));
+        RBraw[i] = shortToVolts(packet_.m_msg.getDataShort(packet_.getInfoList(0).m_calAcc + 3 * CALIB_DATA_OFFSET + 2 * RAWFORCE_OFFSET + 2 * i));
+        RFraw[i] = shortToVolts(packet_.m_msg.getDataShort(packet_.getInfoList(0).m_calAcc + 4 * CALIB_DATA_OFFSET + 3 * RAWFORCE_OFFSET + 2 * i));
+      }
+
+    }
+    
+  }
+
 private:
+
+  std::thread th_;
+  std::mutex mutex_;
+  std::shared_ptr<Packet> packet_;
 
   CmtOutputMode mode = CMT_OUTPUTMODE_CALIB | CMT_OUTPUTMODE_AUXILIARY;
   CmtOutputSettings settings = CMT_OUTPUTSETTINGS_AUXILIARYMODE_FORCE | CMT_OUTPUTSETTINGS_TIMESTAMP_SAMPLECNT;
@@ -247,7 +275,7 @@ private:
   XsensResultValue res = XRV_OK;
 
   // sample counter
-  unsigned short sdata = NULL;
+  unsigned short sdata_ = NULL;
 
   // Unloaded voltage measure of force shoes
   double LFUnload[6], LBUnload[6], RFUnload[6], RBUnload[6] = { 0., 0., 0., 0., 0., 0. };
