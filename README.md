@@ -1,29 +1,24 @@
-mc_rtc new plugin template
-==
+# ForceShoesPlugin
 
-This project is a template for a new plugin wihtin [mc_rtc]
+This plugin integrates the force sensors of the `Xsens force shoes` into `mc_rtc`.
 
-It comes with:
-- a CMake project that can build a plugin for [mc_rtc], the project can be put within [mc_rtc] source-tree for easier updates
-- clang-format files
-- automated GitHub Actions builds on three major platforms
+It depends on:
+- [mc_rtc](https://github.com/jrl-umi3218/mc_rtc)
+- [The MT SDK](https://content.xsens.com/hubfs/Downloads/Software/mtsdk3.3_setup.zip)
 
-Quick start
---
+## Installation
 
-1. Renaming the controller from `NewPlugin` to `MyPlugin`. In a shell (Git Bash on Windows, replace sed with gsed on macOS):
+After installing the dependencies,
 
-```bash
-sed -i -e's/NewPlugin/MyPlugin/g' `find . -type f`
-git mv src/NewPlugin.cpp src/MyPlugin.cpp
-git mv src/NewPlugin.h src/MyPlugin.h
-git mv etc/NewPlugin.in.yaml etc/MyPlugin.in.yaml
+```sh
+git clone git@github.com:Hugo-L3174/Force_shoes.git
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
+make -j8
+sudo make install
 ```
 
-2. You can customize the project name in vcpkg.json as well, note that this must follow [vcpkg manifest rules](https://github.com/microsoft/vcpkg/blob/master/docs/users/manifests.md)
+## Running instructions
 
-3. Build and install the project
-
-4. Run using your [mc_rtc] interface of choice, add `MyPlugin` to the `Plugins` configuration entry or enable the autoload option
-
-[mc_rtc]: https://jrl-umi3218.github.io/mc_rtc/
+Run using your `mc_rtc` interface of choice, add `ForceShoesPlugin` to the Plugins configuration entry or enable the autoload option.
+By default the set baudrate is 921k6 and the port is "/dev/ttyUSB0" since this is intended to be used on a linux machine but this can be changed in the ForceShoePlugin.in.yaml configuration file.
