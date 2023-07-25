@@ -11,7 +11,7 @@ It depends on:
 After installing the dependencies,
 
 ```sh
-git clone git@github.com:Hugo-L3174/Force_shoes.git
+git clone git@github.com:Hugo-L3174/mc_force_shoe_plugin.git
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
 make -j8
