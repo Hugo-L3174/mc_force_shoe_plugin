@@ -214,7 +214,7 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
 
 
   //////////////////////////////////////////////////////////////////////////////////////////
-  // process FT vectors from voltages (amplified calibration matrixes * diff voltage vectors
+  // process FT vectors from voltages (amplified calibration matrixes * diff voltage vectors)
   void computeForceVec(){
     // Reseting values
     for (int i = 0; i < 6; i++)
@@ -262,6 +262,8 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
   }
 
 private:
+
+  bool liveMode_ = true; // by default, live reading
 
   std::thread th_;
   std::mutex mutex_;
