@@ -1,13 +1,24 @@
 #include "ForceShoePlugin.h"
 
 #include <mc_control/GlobalPluginMacros.h>
+
+#include <boost/filesystem.hpp>
+namespace bfs = boost::filesystem;
+
 #include <bits/stdc++.h>
 #include <chrono>
 
 namespace mc_plugin
 {
 
-ForceShoePlugin::~ForceShoePlugin() = default;
+ForceShoePlugin::~ForceShoePlugin()
+{
+  if(th_running_ && th_.joinable())
+  {
+    th_running_ = false;
+    th_.join();
+  }
+}
 
 void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc_rtc::Configuration & config)
 {
@@ -18,6 +29,18 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   auto baudrate = config("baudrate", 921600);
   cmt3_.reset(new xsens::Cmt3);
 
+  config("calibFile", calibFile_);
+  if(bfs::exists(calibFile_))
+  {
+    mc_rtc::log::info("[ForceShoes] Load calibration from {}", calibFile_);
+    mc_rtc::Configuration calib(calibFile_);
+    LFUnload = calib("LFUnload");
+    LBUnload = calib("LBUnload");
+    RFUnload = calib("RFUnload");
+    RBUnload = calib("RBUnload");
+    mode_ = Mode::Acquire;
+  }
+
   // Putting mode in datastore (true is live, false is replay), true by default
   liveMode_ =
       ctl.config().find<bool>("ForceShoes", "liveMode").value_or(config.find<bool>("liveMode").value_or(liveMode_));
@@ -27,8 +50,31 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   {
     doHardwareConnect(baudrate, comPort);
     doMtSettings();
-    UnloadedFS();
+    packet_.reset(new Packet((unsigned short)mtCount, cmt3_->isXm()));
+    th_ = std::thread([this]() { dataThread(); });
+  }
+  reset(controller);
+}
 
+void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
+{
+  auto & ctl = controller.controller();
+  if(liveMode_)
+  {
+    ctl.gui()->addElement(
+        {"Plugin", "ForceShoes"},
+        mc_rtc::gui::Label("Status", [this]() { return mode_ == Mode::Calibrate ? "Calibrating" : "Live"; }),
+        mc_rtc::gui::Button("Calibrate", [this]() {
+          std::lock_guard<std::mutex> lck(mutex_);
+          if(mode_ == Mode::Calibrate)
+          {
+            mc_rtc::log::error("[ForceShoes] Already calibrating");
+          }
+          else
+          {
+            mode_ = Mode::Calibrate;
+          }
+        }));
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LFForce", sva::ForceVecd::Zero());
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LBForce", sva::ForceVecd::Zero());
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RFForce", sva::ForceVecd::Zero());
@@ -46,9 +92,6 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
     ctl.datastore().make_call("ForceShoePlugin::GetRBForce", [&ctl, this]() {
       return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce");
     });
-
-    packet_.reset(new Packet((unsigned short)mtCount, cmt3_->isXm()));
-    th_ = std::thread([this]() { dataThread(*cmt3_, *packet_); });
   }
   else
   {
@@ -61,10 +104,7 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
     ctl.datastore().make_call("ForceShoePlugin::GetRBForce",
                               [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RBForce"); });
   }
-}
 
-void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
-{
   mc_rtc::log::info("ForceShoePlugin::reset called");
 }
 
@@ -94,10 +134,7 @@ void ForceShoePlugin::before(mc_control::MCGlobalController & controller)
   }
 }
 
-void ForceShoePlugin::after(mc_control::MCGlobalController & controller)
-{
-  mc_rtc::log::info("ForceShoePlugin::after");
-}
+void ForceShoePlugin::after(mc_control::MCGlobalController &) {}
 
 mc_control::GlobalPlugin::GlobalPluginConfiguration ForceShoePlugin::configuration()
 {

@@ -157,49 +157,6 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////
-  // Do a zero on 100 iterations of unloaded force shoes.
-  void UnloadedFS()
-  {
-    Packet * packet = new Packet((unsigned short)mtCount, cmt3_->isXm());
-    // force unload
-    while(res == XRV_OK && sdata_ < 99)
-    {
-      cmt3_->waitForDataMessage(packet);
-      sdata_ = packet->getSampleCounter();
-
-      for(int i = 0; i < 8; i++)
-      {
-        // calculation is: position of the first (index 0) calibrated acceleration data + offset of calibrated data +
-        // offset of rawforce data + size of a short (2bytes)
-        LBraw[i] = shortToVolts(packet->m_msg.getDataShort(packet->getInfoList(0).m_calAcc + 1 * CALIB_DATA_OFFSET
-                                                           + 0 * RAWFORCE_OFFSET + 2 * i));
-        LFraw[i] = shortToVolts(packet->m_msg.getDataShort(packet->getInfoList(0).m_calAcc + 2 * CALIB_DATA_OFFSET
-                                                           + 1 * RAWFORCE_OFFSET + 2 * i));
-        RBraw[i] = shortToVolts(packet->m_msg.getDataShort(packet->getInfoList(0).m_calAcc + 3 * CALIB_DATA_OFFSET
-                                                           + 2 * RAWFORCE_OFFSET + 2 * i));
-        RFraw[i] = shortToVolts(packet->m_msg.getDataShort(packet->getInfoList(0).m_calAcc + 4 * CALIB_DATA_OFFSET
-                                                           + 3 * RAWFORCE_OFFSET + 2 * i));
-      }
-      for(int i = 0; i < 6; i++)
-      {
-        LBUnload[i] += LBraw[i];
-        LFUnload[i] += LFraw[i];
-        RBUnload[i] += RBraw[i];
-        RFUnload[i] += RFraw[i];
-      }
-    }
-
-    for(int i = 0; i < 6; i++)
-    {
-      LBUnload[i] /= 100;
-      LFUnload[i] /= 100;
-      RBUnload[i] /= 100;
-      RFUnload[i] /= 100;
-    }
-    delete packet;
-  }
-
-  //////////////////////////////////////////////////////////////////////////////////////////
   // compute amplified calibration matrixes (raw/amplifier gain/excitation)
   void computeAmpCalMat()
   {
@@ -255,32 +212,82 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
 
   //////////////////////////////////////////////////////////////////////////////////////////
   // Thread to wait for message while not blocking controller
-  void dataThread(xsens::Cmt3 & cmt3_, Packet & packet_)
+  void dataThread()
   {
-    while(true)
+    Mode prevMode = mode_;
+    Eigen::Vector6d LBCalib, LFCalib, RBCalib, RFCalib = Eigen::Vector6d::Zero();
+    while(th_running_)
     {
-      cmt3_.waitForDataMessage(&packet_);
+      auto res = cmt3_->waitForDataMessage(packet_.get());
+      if(res != XRV_OK)
+      {
+        // FIXME Display a warning on read error?
+        continue;
+      }
       std::lock_guard<std::mutex> lock(mutex_);
-      sdata_ = packet_.getSampleCounter();
+      sdata_ = packet_->getSampleCounter();
+      const auto & msg = packet_->m_msg;
+      const auto & infoList = packet_->getInfoList(0);
+      const auto & calAcc = infoList.m_calAcc;
 
       for(int i = 0; i < 8; i++)
       {
 
-        LBraw[i] = shortToVolts(packet_.m_msg.getDataShort(packet_.getInfoList(0).m_calAcc + 1 * CALIB_DATA_OFFSET
-                                                           + 0 * RAWFORCE_OFFSET + 2 * i));
-        LFraw[i] = shortToVolts(packet_.m_msg.getDataShort(packet_.getInfoList(0).m_calAcc + 2 * CALIB_DATA_OFFSET
-                                                           + 1 * RAWFORCE_OFFSET + 2 * i));
-        RBraw[i] = shortToVolts(packet_.m_msg.getDataShort(packet_.getInfoList(0).m_calAcc + 3 * CALIB_DATA_OFFSET
-                                                           + 2 * RAWFORCE_OFFSET + 2 * i));
-        RFraw[i] = shortToVolts(packet_.m_msg.getDataShort(packet_.getInfoList(0).m_calAcc + 4 * CALIB_DATA_OFFSET
-                                                           + 3 * RAWFORCE_OFFSET + 2 * i));
+        LBraw[i] = shortToVolts(msg.getDataShort(calAcc + 1 * CALIB_DATA_OFFSET + 0 * RAWFORCE_OFFSET + 2 * i));
+        LFraw[i] = shortToVolts(msg.getDataShort(calAcc + 2 * CALIB_DATA_OFFSET + 1 * RAWFORCE_OFFSET + 2 * i));
+        RBraw[i] = shortToVolts(msg.getDataShort(calAcc + 3 * CALIB_DATA_OFFSET + 2 * RAWFORCE_OFFSET + 2 * i));
+        RFraw[i] = shortToVolts(msg.getDataShort(calAcc + 4 * CALIB_DATA_OFFSET + 3 * RAWFORCE_OFFSET + 2 * i));
       }
+      if(mode_ == Mode::Calibrate)
+      {
+        if(prevMode != mode_)
+        {
+          calibSamples_ = 0;
+          LBCalib.setZero();
+          LFCalib.setZero();
+          RBCalib.setZero();
+          RFCalib.setZero();
+        }
+        for(int i = 0; i < 6; ++i)
+        {
+          LBCalib[i] += LBraw[i];
+          LFCalib[i] += LFraw[i];
+          RBCalib[i] += RBraw[i];
+          RFCalib[i] += RFraw[i];
+        }
+        calibSamples_ += 1;
+        if(calibSamples_ == 100)
+        {
+          mode_ = Mode::Acquire;
+          LBUnload = LBCalib / 100;
+          LFUnload = LFCalib / 100;
+          RBUnload = RBCalib / 100;
+          RFUnload = RFCalib / 100;
+          auto calib = mc_rtc::ConfigurationFile(calibFile_);
+          calib.add("LBUnload", LBUnload);
+          calib.add("LFUnload", LFUnload);
+          calib.add("RBUnload", RBUnload);
+          calib.add("RFUnload", RFUnload);
+          calib.save();
+        }
+      }
+      prevMode = mode_;
     }
   }
 
 private:
   bool liveMode_ = true; // by default, live reading
+  std::string calibFile_ = "/tmp/force-shoe-calib.yaml";
 
+  enum class Mode
+  {
+    Calibrate,
+    Acquire
+  };
+  Mode mode_ = Mode::Calibrate;
+  size_t calibSamples_ = 0;
+
+  bool th_running_ = true;
   std::thread th_;
   std::mutex mutex_;
   std::shared_ptr<Packet> packet_;
@@ -290,13 +297,12 @@ private:
   unsigned long mtCount = 0;
   CmtDeviceId deviceIds_[256];
   std::shared_ptr<xsens::Cmt3> cmt3_;
-  XsensResultValue res = XRV_OK;
 
   // sample counter
   unsigned short sdata_ = NULL;
 
   // Unloaded voltage measure of force shoes
-  double LFUnload[6], LBUnload[6], RFUnload[6], RBUnload[6] = {0., 0., 0., 0., 0., 0.};
+  Eigen::Vector6d LFUnload, LBUnload, RFUnload, RBUnload = Eigen::Vector6d::Zero();
 
   // Difference between measured voltage and unloaded
   double LFdiff[6], LBdiff[6], RFdiff[6], RBdiff[6] = {0., 0., 0., 0., 0., 0.};
