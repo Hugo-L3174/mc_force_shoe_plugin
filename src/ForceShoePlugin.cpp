@@ -20,13 +20,8 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   cmt3_.reset(new xsens::Cmt3);
 
   // Putting mode in datastore (true is live, false is replay), true by default
-  auto & liveMode = ctl.datastore().make<bool>("ForceShoesMode", liveMode_);
-
-  if (ctl.config()("ForceShoes").has("liveMode"))
-  {
-    liveMode_ = ctl.config()("ForceShoes")("liveMode");
-    liveMode = liveMode_;
-  }
+  liveMode_ = ctl.config().find<bool>("ForceShoes", "liveMode").value_or(config.find<bool>("liveMode").value_or(liveMode_));
+  ctl.datastore().make<bool>("ForceShoesMode", liveMode_);
 
   if (liveMode_)
   {
