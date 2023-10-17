@@ -4,7 +4,6 @@ This plugin integrates the force sensors of the `Xsens force shoes` into `mc_rtc
 
 It depends on:
 - [mc_rtc](https://github.com/jrl-umi3218/mc_rtc)
-- [The MT SDK](https://content.xsens.com/hubfs/Downloads/Software/mtsdk3.3_setup.zip)
 
 ## Installation
 

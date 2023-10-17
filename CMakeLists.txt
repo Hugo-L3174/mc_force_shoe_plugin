@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.12)
 
 project(ForceShoePlugin LANGUAGES CXX VERSION 1.0.0)
 
@@ -14,41 +14,48 @@ endif()
 configure_file(etc/ForceShoePlugin.in.yaml "${CMAKE_CURRENT_BINARY_DIR}/etc/ForceShoePlugin.yaml")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/etc/ForceShoePlugin.yaml" DESTINATION "${MC_PLUGINS_RUNTIME_INSTALL_PREFIX}/etc")
 
+set(xsens_sdk_SRC
+  src/xsens_sdk/cmt1.cpp
+  src/xsens_sdk/cmt1.h
+  src/xsens_sdk/cmt2.cpp
+  src/xsens_sdk/cmt2.h
+  src/xsens_sdk/cmt3.cpp
+  src/xsens_sdk/cmt3.h
+  src/xsens_sdk/cmtdef.h
+  src/xsens_sdk/cmtmessage.cpp
+  src/xsens_sdk/cmtmessage.h
+  src/xsens_sdk/cmtpacket.cpp
+  src/xsens_sdk/cmtpacket.h
+  src/xsens_sdk/cmtscan.cpp
+  src/xsens_sdk/cmtscan.h
+  src/xsens_sdk/pstdint.h
+  src/xsens_sdk/xsens_exception.cpp
+  src/xsens_sdk/xsens_exception.h
+  src/xsens_sdk/xsens_fifoqueue.h
+  src/xsens_sdk/xsens_file.h
+  src/xsens_sdk/xsens_janitors.h
+  src/xsens_sdk/xsens_list.h
+  src/xsens_sdk/xsens_std.cpp
+  src/xsens_sdk/xsens_std.h
+  src/xsens_sdk/xsens_time.cpp
+  src/xsens_sdk/xsens_time.h
+)
+add_library(xsens_sdk OBJECT ${xsens_sdk_SRC})
+set_target_properties(xsens_sdk PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(xsens_sdk INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/xsens_sdk)
+
 set(plugin_SRC
   src/ForceShoePlugin.cpp
-  src/cmt1.cpp
-  src/cmt2.cpp
-  src/cmt3.cpp
-  src/cmtmessage.cpp
-  src/cmtpacket.cpp
-  src/cmtscan.cpp
-  src/xsens_exception.cpp
-  src/xsens_std.cpp
-  src/xsens_time.cpp
-  )
+)
 
 set(plugin_HDR
   src/ForceShoePlugin.h
-  src/cmt1.h
-  src/cmt2.h
-  src/cmt3.h
-  src/cmtdef.h
-  src/cmtmessage.h
-  src/cmtpacket.h
-  src/cmtscan.h
-  src/pstdint.h
-  src/xsens_exception.h
-  src/xsens_fifoqueue.h
-  src/xsens_file.h
-  src/xsens_janitors.h
-  src/xsens_list.h
-  src/xsens_std.h
-  src/xsens_time.h
 )
 
 # The add_plugin macro is provided by mc_rtc
 option(AUTOLOAD_ForceShoePlugin_PLUGIN "Automatically load ${PLUGIN_NAME} plugin" OFF)
 add_plugin(ForceShoePlugin "${plugin_SRC}" "${plugin_HDR}")
+target_link_libraries(ForceShoePlugin PUBLIC xsens_sdk)
 
 if(BUILD_TESTING)
   add_subdirectory(tests)

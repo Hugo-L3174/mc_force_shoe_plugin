@@ -1,3 +1,5 @@
----
-comPort: "/dev/ttyUSB0"
+comPort: /dev/ttyUSB0
 baudrate: 921600
+# Where the calibration is stored
+# If the file is not present the plugin automatically starts in calibration mode, otherwise it starts in measurement mode
+calibFile: /tmp/force-shoe-calib.yaml
