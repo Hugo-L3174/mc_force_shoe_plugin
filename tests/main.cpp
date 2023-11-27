@@ -23,7 +23,8 @@ int main(int argc, char * argv[])
 
   std::vector<double> qEnc(initq.size(), 0);
   std::vector<double> alphaEnc(initq.size(), 0);
-  auto simulateSensors = [&]() {
+  auto simulateSensors = [&]()
+  {
     auto & robot = gc.robot();
     for(unsigned i = 0; i < robot.refJointOrder().size(); i++)
     {

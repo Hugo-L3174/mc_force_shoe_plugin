@@ -64,34 +64,32 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
     ctl.gui()->addElement(
         {"Plugin", "ForceShoes"},
         mc_rtc::gui::Label("Status", [this]() { return mode_ == Mode::Calibrate ? "Calibrating" : "Live"; }),
-        mc_rtc::gui::Button("Calibrate", [this]() {
-          std::lock_guard<std::mutex> lck(mutex_);
-          if(mode_ == Mode::Calibrate)
-          {
-            mc_rtc::log::error("[ForceShoes] Already calibrating");
-          }
-          else
-          {
-            mode_ = Mode::Calibrate;
-          }
-        }));
+        mc_rtc::gui::Button("Calibrate",
+                            [this]()
+                            {
+                              std::lock_guard<std::mutex> lck(mutex_);
+                              if(mode_ == Mode::Calibrate)
+                              {
+                                mc_rtc::log::error("[ForceShoes] Already calibrating");
+                              }
+                              else
+                              {
+                                mode_ = Mode::Calibrate;
+                              }
+                            }));
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LFForce", sva::ForceVecd::Zero());
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LBForce", sva::ForceVecd::Zero());
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RFForce", sva::ForceVecd::Zero());
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RBForce", sva::ForceVecd::Zero());
 
-    ctl.datastore().make_call("ForceShoePlugin::GetLFForce", [&ctl, this]() {
-      return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce");
-    });
-    ctl.datastore().make_call("ForceShoePlugin::GetLBForce", [&ctl, this]() {
-      return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBForce");
-    });
-    ctl.datastore().make_call("ForceShoePlugin::GetRFForce", [&ctl, this]() {
-      return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce");
-    });
-    ctl.datastore().make_call("ForceShoePlugin::GetRBForce", [&ctl, this]() {
-      return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce");
-    });
+    ctl.datastore().make_call("ForceShoePlugin::GetLFForce", [&ctl, this]()
+                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce"); });
+    ctl.datastore().make_call("ForceShoePlugin::GetLBForce", [&ctl, this]()
+                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBForce"); });
+    ctl.datastore().make_call("ForceShoePlugin::GetRFForce", [&ctl, this]()
+                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce"); });
+    ctl.datastore().make_call("ForceShoePlugin::GetRBForce", [&ctl, this]()
+                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce"); });
   }
   else
   {
