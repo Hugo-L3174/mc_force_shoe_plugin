@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.15)
+set(CMAKE_CXX_STANDARD 17)
 
 project(ForceShoePlugin LANGUAGES CXX VERSION 1.0.0)
 
@@ -53,7 +54,9 @@ set(plugin_HDR
 )
 
 # The add_plugin macro is provided by mc_rtc
-option(AUTOLOAD_ForceShoePlugin_PLUGIN "Automatically load ${PLUGIN_NAME} plugin" OFF)
+set(AUTOLOAD_ForceShoePlugin_PLUGIN
+    OFF
+    CACHE INTERNAL "Automatically load ForceShoePlugin plugin")
 add_plugin(ForceShoePlugin "${plugin_SRC}" "${plugin_HDR}")
 target_link_libraries(ForceShoePlugin PUBLIC xsens_sdk)
 
