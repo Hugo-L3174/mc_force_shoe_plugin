@@ -19,12 +19,13 @@ using namespace xsens;
 #define RAWFORCE_OFFSET 16 // 16 bytes
 
 // this macro tests for an error and exits the program with a message if there was one
-#define EXIT_ON_ERROR(res, comment)                                                                    \
-  if(res != XRV_OK)                                                                                    \
-  {                                                                                                    \
-    mc_rtc::log::error_and_throw("Error {} occurred in " comment ": {}\n", res, xsensResultText(res)); \
-    exit(1);                                                                                           \
+void exit_on_error(XsensResultValue res, const std::string & comment)
+{
+  if(res != XRV_OK)
+  {
+    mc_rtc::log::error_and_throw("Error {} occurred in {}: {}\n", res, comment, xsensResultText(res));
   }
+}
 
 namespace mc_plugin
 {
@@ -47,92 +48,25 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
   // doHardwareConnect
   //
   // Connects to the desired port at the desired baudrate and checks for
-  void doHardwareConnect(uint32_t baudrate, std::string portName)
-  {
-    XsensResultValue res;
-    List<CmtPortInfo> portInfo;
-
-    xsens::cmtScanPorts(portInfo);
-
-    CmtPortInfo current = {0, 0, 0, ""};
-    current.m_baudrate = numericToRate(baudrate);
-    sprintf(current.m_portName, portName.c_str());
-
-    mc_rtc::log::info("Using COM port {} at {} baud", current.m_portName, current.m_baudrate);
-
-    mc_rtc::log::info("Opening port...");
-
-    // open the port which the device is connected to and connect at the device's baudrate.
-    res = cmt3_->openPort(current.m_portName, current.m_baudrate);
-    EXIT_ON_ERROR(res, "cmtOpenPort");
-
-    mc_rtc::log::info("done");
-
-    // set the measurement timeout to 100ms (default is 16ms)
-    int timeOut = 100;
-    res = cmt3_->setTimeoutMeasurement(timeOut);
-    EXIT_ON_ERROR(res, "set measurement timeout");
-    mc_rtc::log::info("Measurement timeout set to {} ms", timeOut);
-
-    // get the Mt sensor count.
-    mtCount = cmt3_->getMtCount();
-    mtCount = mtCount;
-    mc_rtc::log::info("MotionTracker count: {}", mtCount);
-
-    // retrieve the device IDs
-    mc_rtc::log::info("Retrieving MotionTrackers device ID(s)");
-    for(unsigned int j = 0; j < mtCount; j++)
-    {
-      res = cmt3_->getDeviceId((unsigned char)(j + 1), deviceIds_[j]);
-      EXIT_ON_ERROR(res, "getDeviceId");
-      // long deviceIdVal = (long)deviceIds_[j];
-      // mc_rtc::log::info("Device ID at busId {}: {}",j+1, deviceIdVal);
-      // Done using a printf because device id is an unsigned int32 and mc rtc log does not seem to convert correctly
-      printf("Device ID at busId %i: %08lx\n", j + 1, (long)deviceIds_[j]);
-    }
-  }
+  void doHardwareConnect(uint32_t baudrate, std::string portName);
 
   //////////////////////////////////////////////////////////////////////////
   // doMTSettings
   //
   // Set user settings in MTi/MTx
   // Assumes initialized cmt3 class with open COM port
-  void doMtSettings()
-  {
-    XsensResultValue res;
-
-    // set sensor to config sate
-    res = cmt3_->gotoConfig();
-    EXIT_ON_ERROR(res, "gotoConfig");
-
-    unsigned short sampleFreq;
-    sampleFreq = cmt3_->getSampleFrequency();
-
-    // set the device output mode for the device(s)
-    CmtDeviceMode deviceMode(mode, settings, sampleFreq);
-    for(unsigned int i = 0; i < mtCount; i++)
-    {
-      res = cmt3_->setDeviceMode(deviceMode, true, deviceIds_[i]);
-      EXIT_ON_ERROR(res, "setDeviceMode");
-    }
-
-    // start receiving data
-    res = cmt3_->gotoMeasurement();
-    EXIT_ON_ERROR(res, "gotoMeasurement");
-  }
+  void doMtSettings();
 
   //////////////////////////////////////////////////////////////////////////////////////////
   // Convert the short raw value to the voltage in float.
-  double shortToVolts(const uint16_t raw)
+  inline double shortToVolts(const uint16_t raw) const
   {
-    double U = double(raw);
-    U *= 4.999924 / 65535;
-    return U;
+    return static_cast<double>(raw) * 4.999924 / 65535;
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////
   // Convert a numeric baudrate in bps to correct hardware values
-  uint32_t numericToRate(int numeric)
+  inline uint32_t numericToRate(int numeric)
   {
     switch(numeric)
     {
@@ -213,68 +147,7 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
 
   //////////////////////////////////////////////////////////////////////////////////////////
   // Thread to wait for message while not blocking controller
-  void dataThread()
-  {
-    Mode prevMode = mode_;
-    Eigen::Vector6d LBCalib, LFCalib, RBCalib, RFCalib = Eigen::Vector6d::Zero();
-    while(th_running_)
-    {
-      auto res = cmt3_->waitForDataMessage(packet_.get());
-      if(res != XRV_OK)
-      {
-        // FIXME Display a warning on read error?
-        continue;
-      }
-      std::lock_guard<std::mutex> lock(mutex_);
-      sdata_ = packet_->getSampleCounter();
-      const auto & msg = packet_->m_msg;
-      const auto & infoList = packet_->getInfoList(0);
-      const auto & calAcc = infoList.m_calAcc;
-
-      for(int i = 0; i < 8; i++)
-      {
-
-        LBraw[i] = shortToVolts(msg.getDataShort(calAcc + 1 * CALIB_DATA_OFFSET + 0 * RAWFORCE_OFFSET + 2 * i));
-        LFraw[i] = shortToVolts(msg.getDataShort(calAcc + 2 * CALIB_DATA_OFFSET + 1 * RAWFORCE_OFFSET + 2 * i));
-        RBraw[i] = shortToVolts(msg.getDataShort(calAcc + 3 * CALIB_DATA_OFFSET + 2 * RAWFORCE_OFFSET + 2 * i));
-        RFraw[i] = shortToVolts(msg.getDataShort(calAcc + 4 * CALIB_DATA_OFFSET + 3 * RAWFORCE_OFFSET + 2 * i));
-      }
-      if(mode_ == Mode::Calibrate)
-      {
-        if(prevMode != mode_)
-        {
-          calibSamples_ = 0;
-          LBCalib.setZero();
-          LFCalib.setZero();
-          RBCalib.setZero();
-          RFCalib.setZero();
-        }
-        for(int i = 0; i < 6; ++i)
-        {
-          LBCalib[i] += LBraw[i];
-          LFCalib[i] += LFraw[i];
-          RBCalib[i] += RBraw[i];
-          RFCalib[i] += RFraw[i];
-        }
-        calibSamples_ += 1;
-        if(calibSamples_ == 100)
-        {
-          mode_ = Mode::Acquire;
-          LBUnload = LBCalib / 100;
-          LFUnload = LFCalib / 100;
-          RBUnload = RBCalib / 100;
-          RFUnload = RFCalib / 100;
-          auto calib = mc_rtc::ConfigurationFile(calibFile_);
-          calib.add("LBUnload", LBUnload);
-          calib.add("LFUnload", LFUnload);
-          calib.add("RBUnload", RBUnload);
-          calib.add("RFUnload", RFUnload);
-          calib.save();
-        }
-      }
-      prevMode = mode_;
-    }
-  }
+  void dataThread();
 
 private:
   bool liveMode_ = true; // by default, live reading
