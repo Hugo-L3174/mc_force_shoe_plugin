@@ -5,6 +5,7 @@
 #pragma once
 
 #include <mc_control/GlobalPlugin.h>
+#include <mc_rtc/Schema.h>
 #include <SpaceVecAlg/SpaceVecAlg>
 #include <cstring>
 #include <thread>
@@ -18,17 +19,42 @@ using namespace xsens;
 #define CALIB_DATA_OFFSET 3 * 12 // 3*12 bytes
 #define RAWFORCE_OFFSET 16 // 16 bytes
 
-// this macro tests for an error and exits the program with a message if there was one
-void exit_on_error(XsensResultValue res, const std::string & comment)
+namespace mc_force_shoe_plugin
 {
-  if(res != XRV_OK)
-  {
-    mc_rtc::log::error_and_throw("Error {} occurred in {}: {}\n", res, comment, xsensResultText(res));
-  }
-}
 
-namespace mc_plugin
+struct MotionTracker
 {
+  MC_RTC_NEW_SCHEMA(MotionTracker)
+#define MEMBER(...) MC_RTC_SCHEMA_REQUIRED_DEFAULT_MEMBER(MotionTracker, __VA_ARGS__)
+  MEMBER(std::string, serialNumber, "Motion Tracker's serial number")
+#undef MEMBER
+};
+
+struct ForceSensor
+{
+  MC_RTC_NEW_SCHEMA(ForceSensor)
+#define MEMBER(...) MC_RTC_SCHEMA_REQUIRED_DEFAULT_MEMBER(ForceSensor, __VA_ARGS__)
+  MEMBER(std::string, serialNumber, "Force sensor's serial number")
+  MEMBER(Eigen::MatrixXd, calibrationMatrix, "Calibration matrix")
+#undef MEMBER
+};
+
+struct ForceShoeSensors
+{
+  MC_RTC_NEW_SCHEMA(ForceShoeSensors)
+#define MEMBER(...) MC_RTC_SCHEMA_REQUIRED_DEFAULT_MEMBER(ForceShoeSensors, __VA_ARGS__)
+  MEMBER(bool, useFeature, "Use magic feature")
+  MEMBER(double, weight, "Task weight")
+  MEMBER(std::vector<std::string>, names, "Some names")
+  using MapType = std::map<std::string, double> MEMBER(MapType, jointValues, "Map of joint names and values")
+      MEMBER(sva::ForceVecd, wrench, "Target wrench") MEMBER(sva::PTransformd, pt, "Some transform")
+#undef MEMBER
+};
+
+/**
+ * @brief tests for an error and exits the program with a message if there was one
+ */
+void exit_on_error(XsensResultValue res, const std::string & comment);
 
 struct ForceShoePlugin : public mc_control::GlobalPlugin
 {
@@ -227,4 +253,4 @@ private:
       15.4821990529192,  -326.427519836563, -12.5539291346415, -357.7553030025,   24.0083185975606,  -337.24859897945};
 };
 
-} // namespace mc_plugin
+} // namespace mc_force_shoe_plugin

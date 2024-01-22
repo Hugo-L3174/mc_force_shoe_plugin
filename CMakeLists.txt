@@ -54,8 +54,7 @@ set(plugin_HDR
 )
 
 # The add_plugin macro is provided by mc_rtc
-set(AUTOLOAD_ForceShoePlugin_PLUGIN
-    OFF
+set(AUTOLOAD_ForceShoePlugin_PLUGIN OFF
     CACHE INTERNAL "Automatically load ForceShoePlugin plugin")
 add_plugin(ForceShoePlugin "${plugin_SRC}" "${plugin_HDR}")
 target_link_libraries(ForceShoePlugin PUBLIC xsens_sdk)

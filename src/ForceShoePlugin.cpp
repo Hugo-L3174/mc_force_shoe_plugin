@@ -1,14 +1,18 @@
 #include "ForceShoePlugin.h"
 
 #include <mc_control/GlobalPluginMacros.h>
+#include <filesystem>
 
-#include <boost/filesystem.hpp>
-namespace bfs = boost::filesystem;
-
-#include <bits/stdc++.h>
-
-namespace mc_plugin
+namespace mc_force_shoe_plugin
 {
+
+void exit_on_error(XsensResultValue res, const std::string & comment)
+{
+  if(res != XRV_OK)
+  {
+    mc_rtc::log::error_and_throw("Error {} occurred in {}: {}\n", res, comment, xsensResultText(res));
+  }
+}
 
 ForceShoePlugin::~ForceShoePlugin()
 {
@@ -29,7 +33,7 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   cmt3_.reset(new xsens::Cmt3);
 
   config("calibFile", calibFile_);
-  if(bfs::exists(calibFile_))
+  if(std::filesystem::exists(calibFile_))
   {
     mc_rtc::log::info("[ForceShoes] Load calibration from {}", calibFile_);
     mc_rtc::Configuration calib(calibFile_);
@@ -274,6 +278,6 @@ void ForceShoePlugin::dataThread()
   }
 }
 
-} // namespace mc_plugin
+} // namespace mc_force_shoe_plugin
 
-EXPORT_MC_RTC_PLUGIN("ForceShoePlugin", mc_plugin::ForceShoePlugin)
+EXPORT_MC_RTC_PLUGIN("ForceShoePlugin", mc_force_shoe_plugin::ForceShoePlugin)
