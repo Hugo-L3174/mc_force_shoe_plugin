@@ -7,6 +7,7 @@
 #include <mc_control/GlobalPlugin.h>
 #include <SpaceVecAlg/SpaceVecAlg>
 #include <cstring>
+#include <thread>
 
 #include "cmt3.h"
 #include "cmtscan.h"
