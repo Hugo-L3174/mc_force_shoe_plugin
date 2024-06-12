@@ -9,6 +9,8 @@
 #include <cstring>
 #include <thread>
 
+#include <deque>
+
 #include "cmt3.h"
 #include "cmtscan.h"
 #include "xsens_list.h"
@@ -17,6 +19,12 @@ using namespace xsens;
 #define ampGain 4.7
 #define CALIB_DATA_OFFSET 3 * 12 // 3*12 bytes
 #define RAWFORCE_OFFSET 16 // 16 bytes
+double coeffLFx=0.9251;
+double coeffLFy= 0.9244;
+double coeffLfz=0.9326;
+double coeffLBx=1.6986;
+double coeffLBy=0.93;
+double coeffLBz=0.9679;
 
 // this macro tests for an error and exits the program with a message if there was one
 #define EXIT_ON_ERROR(res, comment)                                                                    \
@@ -26,8 +34,9 @@ using namespace xsens;
     exit(1);                                                                                           \
   }
 
+
 namespace mc_plugin
-{
+{ 
 
 struct ForceShoePlugin : public mc_control::GlobalPlugin
 {
@@ -42,6 +51,7 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
   mc_control::GlobalPlugin::GlobalPluginConfiguration configuration() override;
 
   ~ForceShoePlugin() override;
+ 
 
   //////////////////////////////////////////////////////////////////////////
   // doHardwareConnect
@@ -171,6 +181,9 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
         ampCalMatRF[i][j] = rawCalMatRF[i][j] / ampGain / RFraw[6];
       }
     }
+
+   
+
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////
@@ -190,6 +203,7 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
   // process FT vectors from voltages (amplified calibration matrixes * diff voltage vectors)
   void computeForceVec()
   {
+    
     // Reseting values
     for(int i = 0; i < 6; i++)
     {
@@ -209,7 +223,67 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
         RFforcevec[i] += ampCalMatRF[i][j] * RFdiff[j];
       }
     }
+
+    
   }
+
+  // void computeFilteredForceVec()
+  // {
+  //   constexpr int filterSize=10; 
+  //   static std::deque<Eigen::Vector6d> LBForceHistory(filterSize, Eigen::Vector6d::Zero());
+  //   static std::deque<Eigen::Vector6d> LFForceHistory(filterSize, Eigen::Vector6d::Zero());
+  //   static std::deque<Eigen::Vector6d> RBForceHistory(filterSize, Eigen::Vector6d::Zero());
+  //   static std::deque<Eigen::Vector6d> RFForceHistory(filterSize, Eigen::Vector6d::Zero());
+
+  //    static std::deque<Eigen::Vector6d> LBFilteredvec(filterSize, Eigen::Vector6d::Zero());
+  //   static std::deque<Eigen::Vector6d> LFFilteredvec(filterSize, Eigen::Vector6d::Zero());
+  //   static std::deque<Eigen::Vector6d> RBFilteredvec(filterSize, Eigen::Vector6d::Zero());
+  //   static std::deque<Eigen::Vector6d> RFFilteredvec(filterSize, Eigen::Vector6d::Zero());
+
+  //   LBForceHistory.push_front(Eigen::Vector6d(LBforcevec));
+  //   LFForceHistory.push_front(Eigen::Vector6d(LFforcevec));
+  //   RBForceHistory.push_front(Eigen::Vector6d(RBforcevec));
+  //   RFForceHistory.push_front(Eigen::Vector6d(RFforcevec));
+
+
+
+
+  //   if (LBForceHistory.size()>filterSize)
+  //     LBForceHistory.pop_back();
+
+  //   if (LFForceHistory.size()>filterSize)
+  //     LFForceHistory.pop_back();
+
+  //   if (RBForceHistory.size()>filterSize)
+  //     RAWFORCE_OFFSET.pop_back();
+
+  //   if (RFForceHistory.size()>filterSize)
+  //     RFForceHistory.pop_back();
+    
+  //   Eigen::Vector6d filteredLBForce = Eigen::Vector6d::Zero();
+  //   Eigen::Vector6d filteredLFForce = Eigen::Vector6d::Zero();
+  //   Eigen::Vector6d filteredRBForce = Eigen::Vector6d::Zero();
+  //   Eigen::Vector6d filteredRFForce = Eigen::Vector6d::Zero();
+
+  //   for (const auto& force : LBForceHistory)
+  //     filteredLBForce/=LBForceHistory.size();
+
+  //   for (const auto& force : LFForceHistory)
+  //     filteredLFForce/=LFForceHistory.size();
+
+  //   for (const auto& force : RBForceHistory)
+  //     filteredRBForce/=RBForceHistory.size();
+
+  //   for (const auto& force : RFForceHistory)
+  //     filteredRFForce/=RFForceHistory.size();
+
+  //   LBFilteredvec= filteredLBForce.data();
+  //   LFFilteredvec= filteredLBForce.data();
+  //   RBFilteredvec= filteredLBForce.data();
+  //   RFFilteredvec= filteredLBForce.data();
+
+
+  // }  
 
   //////////////////////////////////////////////////////////////////////////////////////////
   // Thread to wait for message while not blocking controller
@@ -279,7 +353,7 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
 private:
   bool liveMode_ = true; // by default, live reading
   std::string calibFile_ = "/tmp/force-shoe-calib.yaml";
-
+   
   enum class Mode
   {
     Calibrate,
@@ -317,23 +391,23 @@ private:
   // Amplified calibration matrixes: result of rawCalMat/amplifierGain/Excitation voltage
   double ampCalMatLF[6][6], ampCalMatLB[6][6], ampCalMatRF[6][6], ampCalMatRB[6][6];
 
-  // This is the raw calibration matrix for the force sensor FT15247 (Left Front)
+  // This is the raw calibration matrix for the force sensor FT15249 (Left Front)
   double rawCalMatLF[6][6] = {
-      -260.788387941521, 280.51270866262,   -176.788550390165, -22149.7660781794, 870.56029660701,   22231.6820003835,
-      -3233.29161780521, 24319.285256895,   -1034.26251110171, -12792.311637103,  1877.18281618915,  -13149.3643537885,
-      32449.3399445989,  435.280705676649,  31842.8234465708,  944.568229321692,  32641.8543195954,  -91.2673636327253,
-      -19.0939497899534, 166.619421126018,  -520.664477440383, -105.404235122557, 544.519740303169,  -87.019012132782,
-      598.55592315993,   9.3819410040285,   -305.703912773916, 138.684344864427,  -329.736084208309, -151.598339741736,
-      15.3313853756592,  -296.512833896559, 20.9394808955492,  -324.029184197298, -5.54010233271106, -324.243620334801};
+      505.107982172812, 87.11955819031,  1367.21872816217, -21930.7381123915, -1652.27974488926,   22496.7931451793,
+     -1108.37239160853, 25287.898316577,   1064.19237363973, -12625.5413902417,  623.98729881893,  -12993.542825778,
+      33947.1671344626,  225.671123573245,  32492.4215740645,  231.449297408501,  33043.630266866,  163.85593685011,
+      -6.08744074610149, 174.851866946243,  -530.014146023071, -91.4113603666753, 542.792525959471,  -85.3106024240965,
+      619.552064828794,   4.1669049520933,   -321.129488202777, 149.553885176189,  -303.852391159778, -159.076992591019,
+      14.6504114836628,  -321.66610662891,  18.8907964522682, -313.548857821211, 27.3241444486831, -328.214733354103};
 
-  // This is the raw calibration matrix for the force sensor FT15248 (Left Back)
+  // This is the raw calibration matrix for the force sensor FT15250 (Left Back)
   double rawCalMatLB[6][6] = {
-      41.8854593998548,  302.05858296048,   3529.08844076704,  -22746.922941752,  -1098.45056289325, 21839.4537665138,
-      -3722.80476900553, 25806.0626270618,  1540.24941732271,  -13006.0497495542, 772.665809221095,  -12784.1210566955,
-      31952.3390587929,  1517.32482708088,  33431.7185054805,  2190.93437446714,  32274.3603948901,  2006.34561142157,
-      -23.1682511656024, 176.343773270153,  -519.706961556471, -123.266482600202, 526.218237676654,  -54.6080313458558,
-      599.468254179071,  24.9602652720546,  -332.302205700307, 134.866380077964,  -319.584696900081, -169.351637118394,
-      50.769384378332,   -318.022329213099, 45.2243488485171,  -327.60507049336,  14.3896157814584,  -322.550148070767};
+      606.911455888001,  179.249589261239,  2020.7573456855,  -21887.0052414965,  -2938.82688497076, 21901.0959107632,
+      -2872.09191622726, 24954.0099148003,  1981.25741249244,  -12547.0432212112, 1336.39712740197,  -12911.7834064695,
+      32235.0884572035,  1927.83631742394,  31839.2776582772,  16788.27955418321,  31458.3738880778,  1685.99760535694,
+      -13.7691102600808, 171.076519313952,  -501.946621327464, -114.861383306443, 528.089109363728,  -57.9900102127892,
+      582.271739445785,  34.3038116468284,  -314.765577429703, 133.292768127422,  -296.919258796827, -167.33195401529,
+      28.5790955076564,   -307.035541947356, 32.3745736038554,  -315.59403475888,  49.4717847643117,  -320.234754744748};
 
   // This is the raw calibration matrix for the force sensor FT12068 (Right Front)
   double rawCalMatRF[6][6] = {

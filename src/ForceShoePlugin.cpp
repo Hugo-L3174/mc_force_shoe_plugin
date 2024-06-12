@@ -81,6 +81,11 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RFForce", sva::ForceVecd::Zero());
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RBForce", sva::ForceVecd::Zero());
 
+    ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LFFiltered", sva::ForceVecd::Zero());
+    ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LBFiltered", sva::ForceVecd::Zero());
+    ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RFFiltered", sva::ForceVecd::Zero());
+    ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RBFiltered", sva::ForceVecd::Zero());
+
     ctl.datastore().make_call("ForceShoePlugin::GetLFForce", [&ctl, this]()
                               { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce"); });
     ctl.datastore().make_call("ForceShoePlugin::GetLBForce", [&ctl, this]()
@@ -89,6 +94,15 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
                               { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce"); });
     ctl.datastore().make_call("ForceShoePlugin::GetRBForce", [&ctl, this]()
                               { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce"); });
+
+    ctl.datastore().make_call("ForceShoePlugin::GetLFFiltered", [&ctl, this]()
+                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFFiltered"); });
+    ctl.datastore().make_call("ForceShoePlugin::GetLBFiltered", [&ctl, this]()
+                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBFiltered"); });
+    ctl.datastore().make_call("ForceShoePlugin::GetRFFiltered", [&ctl, this]()
+                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFFiltered"); });
+    ctl.datastore().make_call("ForceShoePlugin::GetRBFiltered", [&ctl, this]()
+                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBFiltered"); });
   }
   else
   {
@@ -100,6 +114,15 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
                               [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RFForce"); });
     ctl.datastore().make_call("ForceShoePlugin::GetRBForce",
                               [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RBForce"); });
+
+    ctl.datastore().make_call("ForceShoePlugin::GetLFFiltered",
+                              [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFFiltered"); });
+    ctl.datastore().make_call("ForceShoePlugin::GetLBFiltered",
+                              [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LBFiltered"); });
+    ctl.datastore().make_call("ForceShoePlugin::GetRFFiltered",
+                              [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RFFiltered"); });
+    ctl.datastore().make_call("ForceShoePlugin::GetRBFiltered",
+                              [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RBFiltered"); });
   }
 
   mc_rtc::log::info("ForceShoePlugin::reset called");
@@ -115,19 +138,35 @@ void ForceShoePlugin::before(mc_control::MCGlobalController & controller)
     auto & RF = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce");
     auto & RB = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce");
 
+    auto & LFf = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFFiltered");
+    auto & LBf= ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBFiltered");
+    auto & RFf = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFFiltered");
+    auto & RBf = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBFiltered");
+
     std::lock_guard<std::mutex> lock(mutex_);
     computeAmpCalMat();
     computeUDiff();
     computeForceVec();
 
     LB = sva::ForceVecd(Eigen::Vector3d{LBforcevec[3], LBforcevec[4], LBforcevec[5]},
-                        Eigen::Vector3d{LBforcevec[0], LBforcevec[1], LBforcevec[2]});
+                        Eigen::Vector3d{LBforcevec[0]*coeffLBx, LBforcevec[1]*coeffLBy, LBforcevec[2]*coeffLBz});
     LF = sva::ForceVecd(Eigen::Vector3d{LFforcevec[3], LFforcevec[4], LFforcevec[5]},
-                        Eigen::Vector3d{LFforcevec[0], LFforcevec[1], LFforcevec[2]});
+                        Eigen::Vector3d{LFforcevec[0]*coeffLFx, LFforcevec[1]*coeffLFy, LFforcevec[2]*coeffLfz});
     RB = sva::ForceVecd(Eigen::Vector3d{RBforcevec[3], RBforcevec[4], RBforcevec[5]},
                         Eigen::Vector3d{RBforcevec[0], RBforcevec[1], RBforcevec[2]});
     RF = sva::ForceVecd(Eigen::Vector3d{RFforcevec[3], RFforcevec[4], RFforcevec[5]},
                         Eigen::Vector3d{RFforcevec[0], RFforcevec[1], RFforcevec[2]});
+
+
+
+    // LBf = sva::ForceVecd(Eigen::Vector3d{LBFilteredvec[3], LBFilteredvec[4], LBFilteredvec[5]},
+    //                     Eigen::Vector3d{LBFilteredvec[0]*coeffLBx, LBFilteredvec[1]*coeffLBy, LBFilteredvec[2]*coeffLBz});
+    // LFf = sva::ForceVecd(Eigen::Vector3d{LFFilteredvec[3], LFFilteredvec[4], LFFilteredvec[5]},
+    //                     Eigen::Vector3d{LFFilteredvec[0]*coeffLFx, LFFilteredvec[1]*coeffLFy, LFFilteredvec[2]*coeffLfz});
+    // RBf = sva::ForceVecd(Eigen::Vector3d{RBFilteredvec[3], RBFilteredvec[4], RBFilteredvec[5]},
+    //                     Eigen::Vector3d{RBforcevec[0], RBforcevec[1], RBforcevec[2]});
+    // RFf = sva::ForceVecd(Eigen::Vector3d{RFFilteredvec[3], RFFilteredvec[4], RFFilteredvec[5]},
+    //                      Eigen::Vector3d{RFFilteredvec[0], RFFilteredvec[1], RFFilteredvec[2]});
   }
 }
 
