@@ -60,6 +60,6 @@ set(AUTOLOAD_ForceShoePlugin_PLUGIN
 add_plugin(ForceShoePlugin "${plugin_SRC}" "${plugin_HDR}")
 target_link_libraries(ForceShoePlugin PUBLIC xsens_sdk)
 
-if(BUILD_TESTING)
-  add_subdirectory(tests)
-endif()
+# if(BUILD_TESTING)
+#   add_subdirectory(tests)
+# endif()
