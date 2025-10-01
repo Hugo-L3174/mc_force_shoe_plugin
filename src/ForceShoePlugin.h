@@ -134,11 +134,14 @@ struct ForceShoeSensor
 
   std::string name_;
 
-  void addToCtl(mc_control::MCController & ctl, const std::vector<std::string> & category)
+  void addToCtl(mc_control::MCController & ctl, std::vector<std::string> category)
   {
-    auto prefix = mc_rtc::io::to_string(category, "::") + "::" + name_;
+    category.push_back(name_);
+    auto prefix = mc_rtc::io::to_string(category, "::");
     // if live mode
     ctl.datastore().make<sva::ForceVecd>(prefix + "::Force", Eigen::Vector6d::Zero());
+    ctl.gui()->addElement(category,
+                             mc_rtc::gui::Label("name", [this]() { return name_; }));
     // else
     // ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
     //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce");

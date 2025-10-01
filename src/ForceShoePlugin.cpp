@@ -29,8 +29,8 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   mc_rtc::log::info("ForceShoePlugin::init called with configuration:\n{}", config.dump(true, true));
 
   // Loading plugin config from schema
-  c_.load(config);
-  c_.addToGUI(*ctl.gui(), {"Plugins", "ForceShoePlugin"}, "Configuration");
+  // c_.load(config);
+  c_.addToGUI(*ctl.gui(), {"Plugins", "ForceShoePlugin", "Configuration"}, "Configure");
 
   cmt3_.reset(new xsens::Cmt3);
 
@@ -58,6 +58,29 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   {
     doHardwareConnect(c_.baudRate, c_.comPort);
     doMtSettings();
+
+    mc_rtc::log::info("Force shoe sensors configs: {}", c_.forceShoeSensors.size());
+    for(int i = 0; i < mtCount; i++)
+    {
+      auto strId = std::to_string((unsigned int)deviceIds_[i]);
+      mc_rtc::log::info("[ForceShoes] Found sensor with ID {}", strId);
+      // Look for a matching configuration
+      for(const auto & sensorConfig : c_.forceShoeSensors)
+      {
+        auto sn = sensorConfig.motionTracker.serialNumber;
+        if(sn == strId)
+        {
+          mc_rtc::log::info("[ForceShoes] Found configuration for sensor with ID {}:\n{}", sn, sensorConfig.dump(true, true));
+        }
+        else
+        {
+          mc_rtc::log::info("[ForceShoes] No configuration found for sensor with ID {}", sn);
+        }
+      }
+
+      forceShoeSensorsById_.emplace((unsigned int)deviceIds_[i], strId);
+      forceShoeSensorsById_.at((unsigned int)deviceIds_[i]).addToCtl(ctl, {"Plugins", "ForceShoes", "Sensors"});
+    }
 
     packet_.reset(new Packet((unsigned short)mtCount, cmt3_->isXm()));
     th_ = std::thread([this]() { dataThread(); });

@@ -75,7 +75,7 @@ ForceShoeSensors:
       ]
 - motionTracker:
     SerialNumber: 02325045
-  forceSensor:On a eu le robot qui a fait un tour de bras complet la semaine derniere ca fait bizarre
+  forceSensor:
     SerialNumber: FT15250
     CalibrationMatrix:
       [

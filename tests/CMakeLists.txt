@@ -1,5 +1,5 @@
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/etc/mc_rtc.yaml" INPUT "${CMAKE_CURRENT_SOURCE_DIR}/etc/mc_rtc.yaml")
-file(GENERATE OUTPUT "$<TARGET_FILE_DIR:ForceShoePlugin>/etc/ForceShoePlugin.yaml" INPUT "${CMAKE_CURRENT_SOURCE_DIR}/etc/ForceShoePlugin.yaml")
+# file(GENERATE OUTPUT "$<TARGET_FILE_DIR:ForceShoePlugin>/etc/ForceShoePlugin.yaml" INPUT "${CMAKE_CURRENT_SOURCE_DIR}/etc/ForceShoePlugin.yaml")
 
 if(MSVC AND _VCPKG_INSTALLED_DIR)
   set(VCPKG_INSTALL_PREFIX "${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_PREFIX}")
