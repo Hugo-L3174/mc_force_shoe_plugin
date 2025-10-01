@@ -27,16 +27,19 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
 {
   auto & ctl = controller.controller();
   mc_rtc::log::info("ForceShoePlugin::init called with configuration:\n{}", config.dump(true, true));
-  // loading config port and baudrate
-  auto comPort = config("comPort", std::string{"/dev/ttyUSB0"});
-  auto baudrate = config("baudrate", 921600);
+
+  // Loading plugin config from schema
+  c_.load(config);
+  c_.addToGUI(*ctl.gui(), {"Plugins", "ForceShoePlugin"}, "Configuration");
+
   cmt3_.reset(new xsens::Cmt3);
 
-  config("calibFile", calibFile_);
-  if(std::filesystem::exists(calibFile_))
+  const auto & calibFile = c_.calibFile;
+  config("calibFile", calibFile);
+  if(std::filesystem::exists(calibFile))
   {
-    mc_rtc::log::info("[ForceShoes] Load calibration from {}", calibFile_);
-    mc_rtc::Configuration calib(calibFile_);
+    mc_rtc::log::info("[ForceShoes] Load calibration from {}", calibFile);
+    mc_rtc::Configuration calib(calibFile);
     LFUnload = calib("LFUnload");
     LBUnload = calib("LBUnload");
     RFUnload = calib("RFUnload");
@@ -45,14 +48,17 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   }
 
   // Putting mode in datastore (true is live, false is replay), true by default
-  liveMode_ =
-      ctl.config().find<bool>("ForceShoes", "liveMode").value_or(config.find<bool>("liveMode").value_or(liveMode_));
-  ctl.datastore().make<bool>("ForceShoesMode", liveMode_);
-
-  if(liveMode_)
+  if(auto ctlLiveMode = ctl.config().find<bool>("ForceShoes", "liveMode"))
   {
-    doHardwareConnect(baudrate, comPort);
+    c_.liveMode = *ctlLiveMode;
+  }
+  ctl.datastore().make<bool>("ForceShoesMode", c_.liveMode);
+
+  if(c_.liveMode)
+  {
+    doHardwareConnect(c_.baudRate, c_.comPort);
     doMtSettings();
+
     packet_.reset(new Packet((unsigned short)mtCount, cmt3_->isXm()));
     th_ = std::thread([this]() { dataThread(); });
   }
@@ -62,7 +68,7 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
 void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
 {
   auto & ctl = controller.controller();
-  if(liveMode_)
+  if(c_.liveMode)
   {
     ctl.gui()->addElement(
         {"Plugin", "ForceShoes"},
@@ -80,6 +86,7 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
                                 mode_ = Mode::Calibrate;
                               }
                             }));
+    // TODO: after connecting
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LFForce", sva::ForceVecd::Zero());
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LBForce", sva::ForceVecd::Zero());
     ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RFForce", sva::ForceVecd::Zero());
@@ -111,7 +118,7 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
 
 void ForceShoePlugin::before(mc_control::MCGlobalController & controller)
 {
-  if(liveMode_)
+  if(c_.liveMode)
   {
     auto & ctl = controller.controller();
     auto & LF = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce");
@@ -158,7 +165,6 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
   sprintf(current.m_portName, portName.c_str());
 
   mc_rtc::log::info("Using COM port {} at {} baud", current.m_portName, current.m_baudrate);
-
   mc_rtc::log::info("Opening port...");
 
   // open the port which the device is connected to and connect at the device's baudrate.
@@ -175,7 +181,6 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
 
   // get the Mt sensor count.
   mtCount = cmt3_->getMtCount();
-  mtCount = mtCount;
   mc_rtc::log::info("MotionTracker count: {}", mtCount);
 
   // retrieve the device IDs
@@ -259,14 +264,15 @@ void ForceShoePlugin::dataThread()
         RFCalib[i] += RFraw[i];
       }
       calibSamples_ += 1;
-      if(calibSamples_ == 100)
+      const auto Nsamples = c_.calibrationSamples;
+      if(calibSamples_ == Nsamples)
       {
         mode_ = Mode::Acquire;
-        LBUnload = LBCalib / 100;
-        LFUnload = LFCalib / 100;
-        RBUnload = RBCalib / 100;
-        RFUnload = RFCalib / 100;
-        auto calib = mc_rtc::ConfigurationFile(calibFile_);
+        LBUnload = LBCalib / Nsamples;
+        LFUnload = LFCalib / Nsamples;
+        RBUnload = RBCalib / Nsamples;
+        RFUnload = RFCalib / Nsamples;
+        auto calib = mc_rtc::ConfigurationFile(c_.calibFile);
         calib.add("LBUnload", LBUnload);
         calib.add("LFUnload", LFUnload);
         calib.add("RBUnload", RBUnload);

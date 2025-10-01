@@ -58,6 +58,7 @@ set(AUTOLOAD_ForceShoePlugin_PLUGIN OFF
     CACHE INTERNAL "Automatically load ForceShoePlugin plugin")
 add_plugin(ForceShoePlugin "${plugin_SRC}" "${plugin_HDR}")
 target_link_libraries(ForceShoePlugin PUBLIC xsens_sdk)
+target_include_directories(ForceShoePlugin PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 
 # if(BUILD_TESTING)
 #   add_subdirectory(tests)

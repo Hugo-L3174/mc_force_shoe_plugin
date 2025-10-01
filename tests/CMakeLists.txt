@@ -10,3 +10,7 @@ endif()
 add_executable(test_controller main.cpp)
 target_link_libraries(test_controller PUBLIC mc_rtc::mc_control)
 add_test(NAME test_controller COMMAND test_controller "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/etc/mc_rtc.yaml")
+
+add_executable(test_plugin_configuration test_plugin_configuration.cpp)
+target_link_libraries(test_plugin_configuration PUBLIC ForceShoePlugin)
+add_test(NAME test_plugin_configuration COMMAND test_plugin_configuration "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/etc/mc_rtc.yaml")

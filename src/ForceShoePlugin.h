@@ -6,6 +6,7 @@
 
 #include <mc_control/GlobalPlugin.h>
 #include <mc_rtc/Schema.h>
+#include <mc_rtc/io_utils.h>
 #include <SpaceVecAlg/SpaceVecAlg>
 #include <cstring>
 #include <thread>
@@ -22,39 +23,132 @@ using namespace xsens;
 namespace mc_force_shoe_plugin
 {
 
-struct MotionTracker
+struct MotionTrackerSchema
 {
-  MC_RTC_NEW_SCHEMA(MotionTracker)
-#define MEMBER(...) MC_RTC_SCHEMA_REQUIRED_DEFAULT_MEMBER(MotionTracker, __VA_ARGS__)
+  MC_RTC_NEW_SCHEMA(MotionTrackerSchema)
+#define MEMBER(...) MC_RTC_SCHEMA_REQUIRED_DEFAULT_MEMBER(MotionTrackerSchema, __VA_ARGS__)
   MEMBER(std::string, serialNumber, "Motion Tracker's serial number")
 #undef MEMBER
 };
 
-struct ForceSensor
+struct ForceSensorCalibrationSchema
 {
-  MC_RTC_NEW_SCHEMA(ForceSensor)
-#define MEMBER(...) MC_RTC_SCHEMA_REQUIRED_DEFAULT_MEMBER(ForceSensor, __VA_ARGS__)
+  MC_RTC_NEW_SCHEMA(ForceSensorCalibrationSchema)
+  MC_RTC_SCHEMA_MEMBER(ForceSensorCalibrationSchema,
+                       Eigen::Vector6d,
+                       calibrationVector,
+                       "Gravity compensation offset",
+                       mc_rtc::schema::Interactive,
+                       Eigen::Vector6d::Zero())
+};
+
+struct ForceSensorSchema
+{
+  MC_RTC_NEW_SCHEMA(ForceSensorSchema)
+#define MEMBER(...) MC_RTC_SCHEMA_REQUIRED_DEFAULT_MEMBER(ForceSensorSchema, __VA_ARGS__)
   MEMBER(std::string, serialNumber, "Force sensor's serial number")
-  MEMBER(Eigen::MatrixXd, calibrationMatrix, "Calibration matrix")
+#undef MEMBER
+  // XXX: should be a MatrixXd
+  MC_RTC_SCHEMA_MEMBER(ForceSensorSchema,
+                       Eigen::VectorXd,
+                       calibrationVector,
+                       "Calibration matrix represented as a vector",
+                       mc_rtc::schema::Required,
+                       Eigen::VectorXd::Zero(36))
+
+  Eigen::MatrixXd getCalibrationMatrix() const
+  {
+    if(calibrationVector.size() != 36)
+    {
+      mc_rtc::log::error_and_throw("Calibration matrix for force sensor {} is not of size 6x6", serialNumber);
+    }
+    Eigen::MatrixXd calMat(6, 6);
+    for(int i = 0; i < 6; ++i)
+    {
+      for(int j = 0; j < 6; ++j)
+      {
+        calMat(i, j) = calibrationVector[i * 6 + j];
+      }
+    }
+    return calMat;
+  }
+};
+
+struct ForceShoeSensorSchema
+{
+  MC_RTC_NEW_SCHEMA(ForceShoeSensorSchema)
+#define MEMBER(...) MC_RTC_SCHEMA_REQUIRED_DEFAULT_MEMBER(ForceShoeSensorSchema, __VA_ARGS__)
+  MEMBER(MotionTrackerSchema, motionTracker, "Motion tracker associated with this force sensor")
+  MEMBER(ForceSensorSchema, forceSensor, "Force sensor associated with this motion tracker")
 #undef MEMBER
 };
 
-struct ForceShoeSensors
+struct ForceShoePluginSchema
 {
-  MC_RTC_NEW_SCHEMA(ForceShoeSensors)
-#define MEMBER(...) MC_RTC_SCHEMA_REQUIRED_DEFAULT_MEMBER(ForceShoeSensors, __VA_ARGS__)
-  MEMBER(bool, useFeature, "Use magic feature")
-  MEMBER(double, weight, "Task weight")
-  MEMBER(std::vector<std::string>, names, "Some names")
-  using MapType = std::map<std::string, double> MEMBER(MapType, jointValues, "Map of joint names and values")
-      MEMBER(sva::ForceVecd, wrench, "Target wrench") MEMBER(sva::PTransformd, pt, "Some transform")
-#undef MEMBER
+  MC_RTC_NEW_SCHEMA(ForceShoePluginSchema)
+  using VectorForceShoeSensor = std::vector<ForceShoeSensorSchema>;
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
+                       VectorForceShoeSensor,
+                       forceShoeSensors,
+                       "List of force shoe sensors",
+                       mc_rtc::schema::None,
+                       VectorForceShoeSensor{})
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
+                       std::string,
+                       comPort,
+                       "COM port to use to connect to the Xsens device",
+                       mc_rtc::schema::None,
+                       "/dev/ttyUSB0")
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
+                       int,
+                       baudRate,
+                       "baudrate to use to connect to the Xsens device",
+                       mc_rtc::schema::None,
+                       921600)
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
+                       std::string,
+                       calibFile,
+                       "calibration file",
+                       mc_rtc::schema::None,
+                       "/tmp/force-shoe-calib.yaml")
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema, bool, liveMode, "by default, live reading", mc_rtc::schema::None, true)
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
+                       unsigned int,
+                       calibrationSamples,
+                       "Number of samples for gravity compensation calibration",
+                       mc_rtc::schema::Interactive,
+                       100)
 };
 
 /**
  * @brief tests for an error and exits the program with a message if there was one
  */
 void exit_on_error(XsensResultValue res, const std::string & comment);
+
+struct ForceShoeSensor
+{
+  ForceShoeSensor(const std::string & name)
+  {
+    name_ = name;
+  }
+
+  std::string name_;
+
+  void addToCtl(mc_control::MCController & ctl, const std::vector<std::string> & category)
+  {
+    auto prefix = mc_rtc::io::to_string(category, "::") + "::" + name_;
+    // if live mode
+    ctl.datastore().make<sva::ForceVecd>(prefix + "::Force", Eigen::Vector6d::Zero());
+    // else
+    // ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
+    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce");
+    //                           });
+  }
+
+  Eigen::Vector6d calibrationVector = Eigen::Vector6d::Zero();
+  sva::ForceVecd measuredForceRaw = sva::ForceVecd::Zero();
+  sva::ForceVecd measuredForceCalibrated = sva::ForceVecd::Zero();
+};
 
 struct ForceShoePlugin : public mc_control::GlobalPlugin
 {
@@ -176,8 +270,7 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
   void dataThread();
 
 private:
-  bool liveMode_ = true; // by default, live reading
-  std::string calibFile_ = "/tmp/force-shoe-calib.yaml";
+  ForceShoePluginSchema c_; /// plugin configuration from schemas
 
   enum class Mode
   {
@@ -197,6 +290,8 @@ private:
   unsigned long mtCount = 0;
   CmtDeviceId deviceIds_[256];
   std::shared_ptr<xsens::Cmt3> cmt3_;
+
+  std::map<unsigned int, ForceShoeSensor> forceShoeSensorsById_;
 
   // sample counter
   unsigned short sdata_ = NULL;

@@ -8,9 +8,9 @@ calibFile: /tmp/force-shoe-calib.yaml
 #
 # Each force sensor is connected together with a motion tracker
 ForceShoeSensors:
-- MotionTracker:
+- motionTracker:
     SerialNumber: 02325040
-  ForceSensor:
+  forceSensor:
     SerialNumber: FT12068
     CalibrationMatrix:
       [
@@ -21,9 +21,9 @@ ForceShoeSensors:
         -575.310737786879, 14.7864098252503,  306.87524317224,   -161.111324281113, 261.864725287537,  144.440513232962,
         -18.7543249035664, 329.16211996994,   -43.6261968319026, 327.208881044527,  -45.4574714985197, 316.294118203176
       ]
-- MotionTracker:
+- motionTracker:
     SerialNumber: 02325041
-  ForceSensor:
+  forceSensor:
     SerialNumber: FT14035
     CalibrationMatrix:
       [
@@ -34,9 +34,9 @@ ForceShoeSensors:
         612.232383890789,  33.2643570668898,  -314.503852561918, 167.218423612058,  -319.039352381607, -185.640176897279,
         15.4821990529192,  -326.427519836563, -12.5539291346415, -357.7553030025,   24.0083185975606,  -337.24859897945
       ]
-- MotionTracker:
+- motionTracker:
     SerialNumber: 02325042
-  ForceSensor:
+  forceSensor:
     SerialNumber: FT15247
     CalibrationMatrix:
       [
@@ -47,9 +47,9 @@ ForceShoeSensors:
         598.55592315993,   9.3819410040285,   -305.703912773916, 138.684344864427,  -329.736084208309, -151.598339741736,
         15.3313853756592,  -296.512833896559, 20.9394808955492,  -324.029184197298, -5.54010233271106, -324.243620334801
       ]
-- MotionTracker:
+- motionTracker:
     SerialNumber: 02325043
-  ForceSensor:
+  forceSensor:
     SerialNumber: FT15248
     CalibrationMatrix:
       [
@@ -60,9 +60,9 @@ ForceShoeSensors:
         599.468254179071,  24.9602652720546,  -332.302205700307, 134.866380077964,  -319.584696900081, -169.351637118394,
         50.769384378332,   -318.022329213099, 45.2243488485171,  -327.60507049336,  14.3896157814584,  -322.550148070767
       ]
-- MotionTracker:
+- motionTracker:
     SerialNumber: 02325044
-  ForceSensor:
+  forceSensor:
     SerialNumber: FT15249
     CalibrationMatrix:
       [
@@ -73,9 +73,9 @@ ForceShoeSensors:
         619.552064828794,4.1669049520933,-321.129488202777,149.553885176189,-303.852391159778, -159.076992591019,
         14.6504114836628,-321.66610662891,18.8907964522682,-313.548857821211,27.3241444486831, -328.214733354103
       ]
-- MotionTracker:
+- motionTracker:
     SerialNumber: 02325045
-  ForceSensor:
+  forceSensor:
     SerialNumber: FT15250
     CalibrationMatrix:
       [
@@ -86,9 +86,9 @@ ForceShoeSensors:
         582.271739445785, 34.3038116468284, -314.765577429703, 133.292768127422, -296.919258796827, -167.33195401529,
         28.5790955076564, -307.035541947356, 32.3745736038554, -315.59403475888, 49.4717847643117, -320.234754744748
       ]
-- MotionTracker:
+- motionTracker:
     SerialNumber: 02325046
-  ForceSensor:
+  forceSensor:
     SerialNumber: FT15251
     CalibrationMatrix:
       [
@@ -99,9 +99,9 @@ ForceShoeSensors:
         612.557461880974, 35.0872298950849, -330.922758909265, 140.798062424286, -287.702609608894, -166.201831911009,
         17.9710006511129, -315.258746436982, 29.3607082877275, -311.286061928655, 23.7385532892031, -324.697875703077
       ]
-- MotionTracker:
+- motionTracker:
     SerialNumber: 02325047
-  ForceSensor:
+  forceSensor:
     SerialNumber: FT15252
     CalibrationMatrix:
       [
@@ -117,25 +117,25 @@ ForceShoeSensors:
 force_shoes:
   ForceShoe1:
     Right Front:
-      MotionTrackerSN: 02325040
+      motionTrackerSN: 02325040
     Right Back:
-      MotionTrackerSN: 02325041
+      motionTrackerSN: 02325041
     Left Front:
-      MotionTrackerSN: 02325042
+      motionTrackerSN: 02325042
     "Left Back":
-      MotionTrackerSN: 02325043
+      motionTrackerSN: 02325043
   ForceShoe2:
     Right Front:
-      MotionTrackerSN: 02325044
+      motionTrackerSN: 02325044
     Right Back:
-      MotionTrackerSN: 02325045
+      motionTrackerSN: 02325045
     Left Front:
-      MotionTrackerSN: 02325046
+      motionTrackerSN: 02325046
     Left Back:
-      MotionTrackerSN: 02325047
+      motionTrackerSN: 02325047
 
 # This links force sensors from the robot module with force measurement from the shoes
-ForceSensors:
+forceSensors:
   - SensorName: ForceShoe_FT12068
     SerialNumber: FT12068
     Robot: JVRC1
