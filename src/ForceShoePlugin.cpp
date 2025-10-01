@@ -29,7 +29,8 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   mc_rtc::log::info("ForceShoePlugin::init called with configuration:\n{}", config.dump(true, true));
 
   // Loading plugin config from schema
-  // c_.load(config);
+  c_.load(config);
+  mc_rtc::log::warning("schema config is:\n{}", c_.dump(true, true));
   c_.addToGUI(*ctl.gui(), {"Plugins", "ForceShoePlugin", "Configuration"}, "Configure");
 
   cmt3_.reset(new xsens::Cmt3);
@@ -58,29 +59,6 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   {
     doHardwareConnect(c_.baudRate, c_.comPort);
     doMtSettings();
-
-    mc_rtc::log::info("Force shoe sensors configs: {}", c_.forceShoeSensors.size());
-    for(int i = 0; i < mtCount; i++)
-    {
-      auto strId = std::to_string((unsigned int)deviceIds_[i]);
-      mc_rtc::log::info("[ForceShoes] Found sensor with ID {}", strId);
-      // Look for a matching configuration
-      for(const auto & sensorConfig : c_.forceShoeSensors)
-      {
-        auto sn = sensorConfig.motionTracker.serialNumber;
-        if(sn == strId)
-        {
-          mc_rtc::log::info("[ForceShoes] Found configuration for sensor with ID {}:\n{}", sn, sensorConfig.dump(true, true));
-        }
-        else
-        {
-          mc_rtc::log::info("[ForceShoes] No configuration found for sensor with ID {}", sn);
-        }
-      }
-
-      forceShoeSensorsById_.emplace((unsigned int)deviceIds_[i], strId);
-      forceShoeSensorsById_.at((unsigned int)deviceIds_[i]).addToCtl(ctl, {"Plugins", "ForceShoes", "Sensors"});
-    }
 
     packet_.reset(new Packet((unsigned short)mtCount, cmt3_->isXm()));
     th_ = std::thread([this]() { dataThread(); });
@@ -212,10 +190,25 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
   {
     res = cmt3_->getDeviceId((unsigned char)(j + 1), deviceIds_[j]);
     exit_on_error(res, "getDeviceId");
-    // long deviceIdVal = (long)deviceIds_[j];
-    // mc_rtc::log::info("Device ID at busId {}: {}",j+1, deviceIdVal);
-    // Done using a printf because device id is an unsigned int32 and mc rtc log does not seem to convert correctly
-    printf("Device ID at busId %i: %08lx\n", j + 1, (long)deviceIds_[j]);
+
+    // formats the argument as a hexadecimal (`x`), with at least 8 digits (`08`), padded with zeros if necessary.
+    // This gives us the IMU id in the same format as what is written on the device.
+    std::string id_str = fmt::format("{:08x}", (long)deviceIds_[j]);
+    mc_rtc::log::info("Device ID at busId {}: {}", j + 1, id_str);
+    // Look for a matching configuration
+    auto found = std::find_if(c_.forceShoeSensors.begin(),
+                               c_.forceShoeSensors.end(),
+                               [&id_str](const auto & sensorConfig)
+                               { return sensorConfig.motionTracker.serialNumber == id_str; });
+    if(found != c_.forceShoeSensors.end())
+    {
+      mc_rtc::log::info("[ForceShoes] Associated sensor with ID {} to configuration:\n{}", id_str, found->dump(true, true));
+      forceShoeSensorsById_.emplace(id_str, ForceShoeSensor{id_str, *found});
+    }
+    else
+    {
+      mc_rtc::log::warning("[ForceShoes] No configuration found for sensor with ID {}, ignoring", id_str);
+    }
   }
 }
 

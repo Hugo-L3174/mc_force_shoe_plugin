@@ -50,28 +50,11 @@ struct ForceSensorSchema
 #undef MEMBER
   // XXX: should be a MatrixXd
   MC_RTC_SCHEMA_MEMBER(ForceSensorSchema,
-                       Eigen::VectorXd,
-                       calibrationVector,
+                       Eigen::MatrixXd,
+                       calibrationMatrix,
                        "Calibration matrix represented as a vector",
-                       mc_rtc::schema::Required,
-                       Eigen::VectorXd::Zero(36))
-
-  Eigen::MatrixXd getCalibrationMatrix() const
-  {
-    if(calibrationVector.size() != 36)
-    {
-      mc_rtc::log::error_and_throw("Calibration matrix for force sensor {} is not of size 6x6", serialNumber);
-    }
-    Eigen::MatrixXd calMat(6, 6);
-    for(int i = 0; i < 6; ++i)
-    {
-      for(int j = 0; j < 6; ++j)
-      {
-        calMat(i, j) = calibrationVector[i * 6 + j];
-      }
-    }
-    return calMat;
-  }
+                       mc_rtc::schema::None,
+                       Eigen::MatrixXd::Zero(6,6))
 };
 
 struct ForceShoeSensorSchema
@@ -127,12 +110,13 @@ void exit_on_error(XsensResultValue res, const std::string & comment);
 
 struct ForceShoeSensor
 {
-  ForceShoeSensor(const std::string & name)
+  ForceShoeSensor(const std::string & name, ForceShoeSensorSchema & config_) :
+    name_(name), config_(config_)
   {
-    name_ = name;
   }
 
   std::string name_;
+  ForceShoeSensorSchema & config_; // XXX: should this be a ref to the original schema?
 
   void addToCtl(mc_control::MCController & ctl, std::vector<std::string> category)
   {
@@ -294,7 +278,7 @@ private:
   CmtDeviceId deviceIds_[256];
   std::shared_ptr<xsens::Cmt3> cmt3_;
 
-  std::map<unsigned int, ForceShoeSensor> forceShoeSensorsById_;
+  std::map<std::string, ForceShoeSensor> forceShoeSensorsById_;
 
   // sample counter
   unsigned short sdata_ = NULL;
