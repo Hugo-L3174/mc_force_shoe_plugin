@@ -415,7 +415,13 @@ private:
   CmtDeviceId deviceIds_[256];
   std::shared_ptr<xsens::Cmt3> cmt3_;
 
-  std::map<std::string, std::unique_ptr<ForceShoeSensor>> forceShoeSensorsById_;
+  /// Order in which the force sensors were detected on the bus
+  /// This matches the order of the data packets
+  /// Use this order when associating with xsens data readings
+  std::vector<std::string> forceShoeSensorsIds_;
+  /// Actual force shoe sensors implementation
+  /// WARNING: do NOT use for ordering, use forceShoeSensorsIds_ instead
+  std::unordered_map<std::string, std::unique_ptr<ForceShoeSensor>> forceShoeSensorsById_;
 
   // sample counter
   unsigned short sdata_ = NULL;

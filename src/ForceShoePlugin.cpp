@@ -215,6 +215,10 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
     {
       mc_rtc::log::info("[ForceShoes] Associated sensor with ID {} to configuration:\n{}", id_str,
                         found->dump(true, true));
+      // order in which the sensors were detected
+      forceShoeSensorsIds_.push_back(id_str);
+      // create a matching sensor implementation to handle calibration and force computation. This can be used to access
+      // sensors by id WARNING: do not use the keys in this map for ordering, use forceShoeSensorsIds_ instead
       auto [it, inserted] = forceShoeSensorsById_.emplace(
           id_str, std::make_unique<ForceShoeSensor>(found->forceSensor.serialNumber, *found));
     }
@@ -264,6 +268,7 @@ void ForceShoePlugin::dataThread()
     std::lock_guard<std::mutex> lock(mutex_);
     sdata_ = packet_->getSampleCounter();
     const auto & msg = packet_->m_msg;
+    const auto itemCount = packet_->m_itemCount; // number of items in the packet
     const auto & infoList = packet_->getInfoList(0);
     const auto & calAcc = infoList.m_calAcc;
 
@@ -280,9 +285,10 @@ void ForceShoePlugin::dataThread()
     };
 
     bool calibrated = false;
-    for(int i = 0; i < forceShoeSensorsById_.size(); ++i)
+    for(int i = 0; i < forceShoeSensorsIds_.size(); ++i)
     {
-      auto & sensor = *std::next(forceShoeSensorsById_.begin(), i)->second;
+      auto & id = forceShoeSensorsIds_[i];
+      auto & sensor = *forceShoeSensorsById_[id];
       if(mode_ == Mode::Calibrate)
       {
         if(prevMode != mode_)
