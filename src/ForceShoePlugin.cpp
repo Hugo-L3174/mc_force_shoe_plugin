@@ -114,6 +114,7 @@ void ForceShoePlugin::before(mc_control::MCGlobalController & controller)
   for(const auto & [_, forceSensor] : forceShoeSensorsById_)
   {
     forceSensor->addToCtl(controller.controller(), {"Plugins", "ForceShoePlugin", "Sensors"});
+    forceSensor->updateRobotSensor(controller.robot());
   }
 
   if(c_.liveMode)
@@ -223,9 +224,9 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
     mc_rtc::log::info("Device ID at busId {}: {}", j + 1, id_str);
 
     // Look for a matching configuration and create a ForceShoeSensor instance if found
-    auto found = std::find_if(c_.forceShoeSensors.begin(), c_.forceShoeSensors.end(),
-                              [&id_str](const auto & sensorConfig)
-                              { return sensorConfig.motionTracker.serialNumber == id_str; });
+    auto found =
+        std::find_if(c_.forceShoeSensors.begin(), c_.forceShoeSensors.end(), [&id_str](const auto & sensorConfig)
+                     { return sensorConfig.motionTracker.serialNumber == id_str; });
     if(found != c_.forceShoeSensors.end())
     {
       mc_rtc::log::info("[ForceShoes] Associated sensor with ID {} to configuration:\n{}", id_str,
@@ -235,7 +236,7 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
       // create a matching sensor implementation to handle calibration and force computation. This can be used to access
       // sensors by id WARNING: do not use the keys in this map for ordering, use forceShoeSensorsIds_ instead
       auto [it, inserted] = forceShoeSensorsById_.emplace(
-          id_str, std::make_unique<ForceShoeSensor>(found->forceSensor.serialNumber, *found));
+          id_str, std::make_unique<ForceShoeSensor>(found->forceSensor.serialNumber, *found, c_));
     }
     else
     {

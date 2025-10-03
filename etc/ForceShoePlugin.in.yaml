@@ -134,8 +134,11 @@ forceShoeSensors:
 #     Left Back:
 #       motionTrackerSN: !!str "02325047"
 #
-# # This links force sensors from the robot module with force measurement from the shoes
-# forceSensors:
-#   - sensorName: ForceShoe_FT12068
-#     serialNumber: !!str "FT12068"
-#     Robot: JVRC1
+
+# If defined and the sensor is connected,
+# This links force sensors from the robot module with force measurement from the shoes
+robotForceSensors:
+  LeftHandForceSensor:
+    serialNumber: !!str "FT15250"
+  RightHandForceSensor:
+    serialNumber: !!str "FT15252"

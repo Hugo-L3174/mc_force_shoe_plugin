@@ -70,6 +70,18 @@ struct ForceShoeSensorSchema
 #undef MEMBER
 };
 
+/// Mapping of robot force sensors to force shoe sensors
+struct RobotForceSensorEntrySchema
+{
+  MC_RTC_NEW_SCHEMA(RobotForceSensorEntrySchema)
+  MC_RTC_SCHEMA_MEMBER(RobotForceSensorEntrySchema,
+                       std::string,
+                       serialNumber,
+                       "Serial number of the force sensor",
+                       mc_rtc::schema::None,
+                       "");
+};
+
 struct ForceShoePluginSchema
 {
   MC_RTC_NEW_SCHEMA(ForceShoePluginSchema)
@@ -105,6 +117,14 @@ struct ForceShoePluginSchema
                        "List of force shoe sensors",
                        mc_rtc::schema::None,
                        VectorForceShoeSensor{})
+  // Link force shoe sensors to robot force sensors
+  using RobotForceSensorMap = std::map<std::string, RobotForceSensorEntrySchema>;
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
+                       RobotForceSensorMap,
+                       robotForceSensors,
+                       "Optional mapping to robot force sensors",
+                       mc_rtc::schema::None,
+                       RobotForceSensorMap{})
 };
 
 /**
@@ -118,8 +138,8 @@ struct ForceShoeSensor
   using RawMeasurementArray = std::array<double, 8>;
   using VoltageArray = std::array<double, 6>; // FIXME: should be 6 but segfaults
 
-  ForceShoeSensor(const std::string & name, ForceShoeSensorSchema & config_)
-  : name_(name), config_(config_), ampCalMat_(Eigen::MatrixXd::Zero(6, 6))
+  ForceShoeSensor(const std::string & name, ForceShoeSensorSchema & config_, ForceShoePluginSchema & pluginConfig)
+  : name_(name), config_(config_), pluginConfig_(pluginConfig), ampCalMat_(Eigen::MatrixXd::Zero(6, 6))
   {
   }
 
@@ -127,7 +147,8 @@ struct ForceShoeSensor
   ForceShoeSensor & operator=(const ForceShoeSensor &) = delete;
 
   std::string name_;
-  ForceShoeSensorSchema & config_; // XXX: should this be a ref to the original schema?
+  ForceShoeSensorSchema & config_;
+  ForceShoePluginSchema & pluginConfig_;
 
   void addToCtl(mc_control::MCController & ctl, std::vector<std::string> category)
   {
@@ -150,7 +171,53 @@ struct ForceShoeSensor
     // ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
     //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce");
     //                           });
+
+    // Check if the controller has a force sensor defined in the plugin's configuration
   }
+
+  void updateRobotSensor(mc_rbdyn::Robot & robot)
+  {
+    // XXX should be mapped once and updated if the sensor exists
+    const auto & robotSensorsConfig = pluginConfig_.robotForceSensors;
+    auto it = std::find_if(robotSensorsConfig.begin(), robotSensorsConfig.end(), [this](const auto & entry)
+                           { return entry.second.serialNumber == config_.forceSensor.serialNumber; });
+    if(it != robotSensorsConfig.end())
+    {
+      const auto & sensorName = it->first;
+      if(robot.hasForceSensor(sensorName))
+      {
+        auto & data = *robot.data();
+        auto & fs = data.forceSensors[data.forceSensorsIndex.at(sensorName)];
+        fs.wrench(measuredForce());
+      }
+      else
+      {
+        mc_rtc::log::warning("[ForceShoeSensor {}] Robot {} has no force sensor named {}", name_, robot.name(),
+                             sensorName);
+      }
+    }
+    else
+    {
+      // mc_rtc::log::info("[ForceShoeSensor {}] No mapping found for force sensor with serial number {}",
+      //                   name_, config_.forceSensor.serialNumber);
+    }
+  }
+
+  // auto setForceShoeSensorValue =
+  //     [this](const std::string & datastoreName, const std::string & robotName, const std::string & sensorName)
+  // {
+  //   auto & data = *robot(robotName).data();
+  //   auto & fs = data.forceSensors[data.forceSensorsIndex.at(sensorName)];
+  //   if(this->datastore().has(datastoreName))
+  //   {
+  //     auto & wrench = this->datastore().get<sva::ForceVecd>(datastoreName);
+  //     fs.wrench(wrench);
+  //   }
+  //   else
+  //   {
+  //     fs.wrench(sva::ForceVecd::Zero());
+  //   }
+  // };
 
   void removeFromCtl(mc_control::MCController & ctl, std::vector<std::string> category)
   {
