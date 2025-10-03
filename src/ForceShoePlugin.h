@@ -7,8 +7,11 @@
 #include <mc_control/GlobalPlugin.h>
 #include <mc_rtc/Schema.h>
 #include <mc_rtc/io_utils.h>
+#include <SpaceVecAlg/EigenTypedef.h>
 #include <SpaceVecAlg/SpaceVecAlg>
 #include <cstring>
+#include <iomanip>
+#include <sstream>
 #include <thread>
 
 #include "cmt3.h"
@@ -16,9 +19,9 @@
 #include "xsens_list.h"
 using namespace xsens;
 
-#define ampGain 4.7
-#define CALIB_DATA_OFFSET 3 * 12 // 3*12 bytes
-#define RAWFORCE_OFFSET 16 // 16 bytes
+constexpr double DEFAULT_AMP_GAIN = 4.7;
+constexpr int CALIB_DATA_OFFSET = 3 * 12; // 3*12 bytes
+constexpr int RAWFORCE_OFFSET = 16; // 16 bytes
 
 namespace mc_force_shoe_plugin
 {
@@ -54,7 +57,8 @@ struct ForceSensorSchema
                        calibrationMatrix,
                        "Calibration matrix represented as a vector",
                        mc_rtc::schema::None,
-                       Eigen::MatrixXd::Zero(6,6))
+                       Eigen::MatrixXd::Zero(6, 6))
+  MC_RTC_SCHEMA_MEMBER(ForceSensorSchema, double, ampGain, "Amplification gain", mc_rtc::schema::None, DEFAULT_AMP_GAIN)
 };
 
 struct ForceShoeSensorSchema
@@ -69,13 +73,6 @@ struct ForceShoeSensorSchema
 struct ForceShoePluginSchema
 {
   MC_RTC_NEW_SCHEMA(ForceShoePluginSchema)
-  using VectorForceShoeSensor = std::vector<ForceShoeSensorSchema>;
-  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
-                       VectorForceShoeSensor,
-                       forceShoeSensors,
-                       "List of force shoe sensors",
-                       mc_rtc::schema::None,
-                       VectorForceShoeSensor{})
   MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
                        std::string,
                        comPort,
@@ -101,6 +98,13 @@ struct ForceShoePluginSchema
                        "Number of samples for gravity compensation calibration",
                        mc_rtc::schema::Interactive,
                        100)
+  using VectorForceShoeSensor = std::vector<ForceShoeSensorSchema>;
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
+                       VectorForceShoeSensor,
+                       forceShoeSensors,
+                       "List of force shoe sensors",
+                       mc_rtc::schema::None,
+                       VectorForceShoeSensor{})
 };
 
 /**
@@ -110,31 +114,164 @@ void exit_on_error(XsensResultValue res, const std::string & comment);
 
 struct ForceShoeSensor
 {
-  ForceShoeSensor(const std::string & name, ForceShoeSensorSchema & config_) :
-    name_(name), config_(config_)
+  // Raw data vectors (G0, G1, G2, G3, G4, G5, G6, ref)
+  using RawMeasurementArray = std::array<double, 8>;
+  using VoltageArray = std::array<double, 6>; // FIXME: should be 6 but segfaults
+
+  ForceShoeSensor(const std::string & name, ForceShoeSensorSchema & config_)
+  : name_(name), config_(config_), ampCalMat_(Eigen::MatrixXd::Zero(6, 6))
   {
   }
+
+  ForceShoeSensor(const ForceShoeSensor &) = delete;
+  ForceShoeSensor & operator=(const ForceShoeSensor &) = delete;
 
   std::string name_;
   ForceShoeSensorSchema & config_; // XXX: should this be a ref to the original schema?
 
   void addToCtl(mc_control::MCController & ctl, std::vector<std::string> category)
   {
+    if(inCtl_) return;
+    inCtl_ = true;
+
+    using namespace mc_rtc::gui;
     category.push_back(name_);
     auto prefix = mc_rtc::io::to_string(category, "::");
     // if live mode
     ctl.datastore().make<sva::ForceVecd>(prefix + "::Force", Eigen::Vector6d::Zero());
-    ctl.gui()->addElement(category,
-                             mc_rtc::gui::Label("name", [this]() { return name_; }));
+
+    ctl.gui()->addElement(this, category, Label("name", [this]() { return name_; }),
+                          ArrayLabel("Unloaded Voltage", [this]() { return unloadedVoltage(); }),
+                          ArrayLabel("Measured Voltage", [this]() { return measuredVoltage(); }),
+                          ArrayLabel("Calibrated Voltage", [this]() { return calibratedVoltage(); }),
+                          ArrayLabel("Force", [this]() { return measuredForce().vector(); }));
     // else
     // ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
     //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce");
     //                           });
   }
 
-  Eigen::Vector6d calibrationVector = Eigen::Vector6d::Zero();
-  sva::ForceVecd measuredForceRaw = sva::ForceVecd::Zero();
-  sva::ForceVecd measuredForceCalibrated = sva::ForceVecd::Zero();
+  void removeFromCtl(mc_control::MCController & ctl, std::vector<std::string> category)
+  {
+    inCtl_ = false;
+    using namespace mc_rtc::gui;
+    category.push_back(name_);
+    auto prefix = mc_rtc::io::to_string(category, "::");
+    ctl.datastore().remove(prefix + "::Force");
+    ctl.gui()->removeCategory(category);
+  }
+
+  void setMeasuredVoltage(const RawMeasurementArray & voltage)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    measuredVoltage_ = voltage;
+    for(size_t i = 0; i < unloadedVoltage_.size(); ++i)
+    {
+      calibratedVoltage_[i] = measuredVoltage_[i] - unloadedVoltage_[i];
+    }
+    computeForceFromVoltage();
+  }
+
+  void startCalibration()
+  {
+    std::lock_guard<std::mutex> lock(calibMutex_);
+    mc_rtc::log::info("[ForceShoeSensor {}] Starting calibration", name_);
+    calibrationVoltageAccumulator_.fill(0.);
+  }
+
+  bool addCalibrationSample(const RawMeasurementArray & voltage, unsigned int Nsamples = 100)
+  {
+    // mc_rtc::log::info("[ForceShoeSensor {}] Adding calibration sample {}: {}", name_, samples_,
+    // mc_rtc::io::to_string(voltage));
+    std::lock_guard<std::mutex> lock(calibMutex_);
+    for(size_t i = 0; i < calibrationVoltageAccumulator_.size(); ++i)
+    {
+      calibrationVoltageAccumulator_[i] += voltage[i];
+    }
+
+    if(++samples_ == Nsamples)
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      for(size_t i = 0; i < calibrationVoltageAccumulator_.size(); ++i)
+      {
+        unloadedVoltage_[i] = calibrationVoltageAccumulator_[i] / static_cast<double>(samples_);
+      }
+      samples_ = 0;
+      mc_rtc::log::info("[ForceShoeSensor {}] Calibration done, unloaded voltage: {}", name_,
+                        mc_rtc::io::to_string(unloadedVoltage_));
+      return true;
+    }
+
+    return false;
+  }
+
+  sva::ForceVecd measuredForce() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return measuredForce_;
+  }
+
+  VoltageArray unloadedVoltage() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return unloadedVoltage_;
+  }
+
+  VoltageArray calibratedVoltage() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return calibratedVoltage_;
+  }
+
+  RawMeasurementArray measuredVoltage() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return measuredVoltage_;
+  }
+
+private:
+  void computeForceFromVoltage()
+  {
+    computeAmplifiedCalibrationMatrix();
+
+    // calibratedVoltage_ is the voltage after removing the unloaded voltage
+    // We convert its first 6 elements (force, couple) to a force using the calibration matrix
+    Eigen::VectorXd voltVec = Eigen::Map<const Eigen::VectorXd>(calibratedVoltage_.data(), 6);
+    Eigen::VectorXd forceVec = ampCalMat_ * voltVec;
+    measuredForce_ = sva::ForceVecd(Eigen::Vector3d{forceVec[3], forceVec[4], forceVec[5]},
+                                    Eigen::Vector3d{forceVec[0], forceVec[1], forceVec[2]});
+  }
+
+  void computeAmplifiedCalibrationMatrix()
+  {
+    const auto & rawCalMat = config_.forceSensor.calibrationMatrix;
+    // mc_rtc::log::info("rawCalMat:\n{}\nampGain: {}\nmeasuredVoltage[6]: {}", rawCalMat, config_.forceSensor.ampGain,
+    // measuredVoltage_[6]);
+    for(int i = 0; i < 6; i++)
+    {
+      for(int j = 0; j < 6; j++)
+      {
+        ampCalMat_(i, j) = rawCalMat(i, j) / config_.forceSensor.ampGain / measuredVoltage_[6];
+      }
+    }
+  }
+
+  VoltageArray calibrationVoltageAccumulator_ = {0.}; /// sum of all measurements since the calibration started
+  unsigned samples_ = 0; /// number of samples accumulated for calibration
+
+  /// reference voltage when no load is applied (calibration)
+  VoltageArray unloadedVoltage_ = {0.};
+  /// raw current voltage reading
+  RawMeasurementArray measuredVoltage_ = {0.};
+  /// Difference between measured voltage and unloaded
+  VoltageArray calibratedVoltage_ = {0.};
+  /// Amplified calibration matrixes: result of rawCalMat/amplifierGain/Excitation voltage
+  Eigen::MatrixXd ampCalMat_;
+  sva::ForceVecd measuredForce_ = sva::ForceVecd::Zero();
+
+  bool inCtl_ = false;
+  mutable std::mutex mutex_;
+  mutable std::mutex calibMutex_;
 };
 
 struct ForceShoePlugin : public mc_control::GlobalPlugin
@@ -206,10 +343,10 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
     {
       for(int j = 0; j < 6; j++)
       {
-        ampCalMatLB[i][j] = rawCalMatLB[i][j] / ampGain / LBraw[6];
-        ampCalMatLF[i][j] = rawCalMatLF[i][j] / ampGain / LFraw[6];
-        ampCalMatRB[i][j] = rawCalMatRB[i][j] / ampGain / RBraw[6];
-        ampCalMatRF[i][j] = rawCalMatRF[i][j] / ampGain / RFraw[6];
+        ampCalMatLB[i][j] = rawCalMatLB[i][j] / DEFAULT_AMP_GAIN / LBraw[6];
+        ampCalMatLF[i][j] = rawCalMatLF[i][j] / DEFAULT_AMP_GAIN / LFraw[6];
+        ampCalMatRB[i][j] = rawCalMatRB[i][j] / DEFAULT_AMP_GAIN / RBraw[6];
+        ampCalMatRF[i][j] = rawCalMatRF[i][j] / DEFAULT_AMP_GAIN / RFraw[6];
       }
     }
   }
@@ -278,7 +415,7 @@ private:
   CmtDeviceId deviceIds_[256];
   std::shared_ptr<xsens::Cmt3> cmt3_;
 
-  std::map<std::string, ForceShoeSensor> forceShoeSensorsById_;
+  std::map<std::string, std::unique_ptr<ForceShoeSensor>> forceShoeSensorsById_;
 
   // sample counter
   unsigned short sdata_ = NULL;

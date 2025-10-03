@@ -1,6 +1,7 @@
 #include "ForceShoePlugin.h"
 
 #include <mc_control/GlobalPluginMacros.h>
+#include <mc_rtc/io_utils.h>
 #include <filesystem>
 
 namespace mc_force_shoe_plugin
@@ -31,7 +32,7 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   // Loading plugin config from schema
   c_.load(config);
   mc_rtc::log::warning("schema config is:\n{}", c_.dump(true, true));
-  c_.addToGUI(*ctl.gui(), {"Plugins", "ForceShoePlugin", "Configuration"}, "Configure");
+  c_.addToGUI(*ctl.gui(), {"Plugins", "ForceShoePlugin", "Plugin Configuration"}, "Configure");
 
   cmt3_.reset(new xsens::Cmt3);
 
@@ -72,7 +73,7 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
   if(c_.liveMode)
   {
     ctl.gui()->addElement(
-        {"Plugin", "ForceShoes"},
+        {"Plugins", "ForceShoePlugin"},
         mc_rtc::gui::Label("Status", [this]() { return mode_ == Mode::Calibrate ? "Calibrating" : "Live"; }),
         mc_rtc::gui::Button("Calibrate",
                             [this]()
@@ -119,6 +120,11 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
 
 void ForceShoePlugin::before(mc_control::MCGlobalController & controller)
 {
+  for(const auto & [_, forceSensor] : forceShoeSensorsById_)
+  {
+    forceSensor->addToCtl(controller.controller(), {"Plugins", "ForceShoePlugin", "Sensors"});
+  }
+
   if(c_.liveMode)
   {
     auto & ctl = controller.controller();
@@ -140,6 +146,11 @@ void ForceShoePlugin::before(mc_control::MCGlobalController & controller)
                         Eigen::Vector3d{RBforcevec[0], RBforcevec[1], RBforcevec[2]});
     RF = sva::ForceVecd(Eigen::Vector3d{RFforcevec[3], RFforcevec[4], RFforcevec[5]},
                         Eigen::Vector3d{RFforcevec[0], RFforcevec[1], RFforcevec[2]});
+
+    // mc_rtc::log::info("LB torque: {}, force: {}", LB.couple().transpose(), LB.force().transpose());
+    // mc_rtc::log::info("LF torque: {}, force: {}", LF.couple().transpose(), LF.force().transpose());
+    // mc_rtc::log::info("RB torque: {}, force: {}", RB.couple().transpose(), RB.force().transpose());
+    // mc_rtc::log::info("RF torque: {}, force: {}", RF.couple().transpose(), RF.force().transpose());
   }
 }
 
@@ -195,15 +206,17 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
     // This gives us the IMU id in the same format as what is written on the device.
     std::string id_str = fmt::format("{:08x}", (long)deviceIds_[j]);
     mc_rtc::log::info("Device ID at busId {}: {}", j + 1, id_str);
-    // Look for a matching configuration
-    auto found = std::find_if(c_.forceShoeSensors.begin(),
-                               c_.forceShoeSensors.end(),
-                               [&id_str](const auto & sensorConfig)
-                               { return sensorConfig.motionTracker.serialNumber == id_str; });
+
+    // Look for a matching configuration and create a ForceShoeSensor instance if found
+    auto found = std::find_if(c_.forceShoeSensors.begin(), c_.forceShoeSensors.end(),
+                              [&id_str](const auto & sensorConfig)
+                              { return sensorConfig.motionTracker.serialNumber == id_str; });
     if(found != c_.forceShoeSensors.end())
     {
-      mc_rtc::log::info("[ForceShoes] Associated sensor with ID {} to configuration:\n{}", id_str, found->dump(true, true));
-      forceShoeSensorsById_.emplace(id_str, ForceShoeSensor{id_str, *found});
+      mc_rtc::log::info("[ForceShoes] Associated sensor with ID {} to configuration:\n{}", id_str,
+                        found->dump(true, true));
+      auto [it, inserted] = forceShoeSensorsById_.emplace(
+          id_str, std::make_unique<ForceShoeSensor>(found->forceSensor.serialNumber, *found));
     }
     else
     {
@@ -254,14 +267,70 @@ void ForceShoePlugin::dataThread()
     const auto & infoList = packet_->getInfoList(0);
     const auto & calAcc = infoList.m_calAcc;
 
+    auto getDataShort = [&](int device, int i)
+    { return msg.getDataShort(calAcc + (device + 1) * CALIB_DATA_OFFSET + device * RAWFORCE_OFFSET + 2 * i); };
+    auto readDeviceVoltage = [this, getDataShort](int device)
+    {
+      std::array<double, 8> voltage;
+      for(int i = 0; i < 8; ++i)
+      {
+        voltage[i] = shortToVolts(getDataShort(device, i));
+      }
+      return voltage;
+    };
+
+    bool calibrated = false;
+    for(int i = 0; i < forceShoeSensorsById_.size(); ++i)
+    {
+      auto & sensor = *std::next(forceShoeSensorsById_.begin(), i)->second;
+      if(mode_ == Mode::Calibrate)
+      {
+        if(prevMode != mode_)
+        {
+          sensor.startCalibration();
+        }
+        if(sensor.addCalibrationSample(readDeviceVoltage(i), c_.calibrationSamples))
+        {
+          calibrated = true;
+        }
+      }
+      else
+      {
+        if(i == 0)
+        {
+          // mc_rtc::log::info("raw voltage new: {}", mc_rtc::io::to_string(readDeviceVoltage(i)));
+        }
+        sensor.setMeasuredVoltage(readDeviceVoltage(i));
+      }
+    }
+    if(calibrated)
+    {
+      mode_ = Mode::Acquire;
+      mc_rtc::log::info("[ForceShoes] Calibration completed, switching to Acquire mode");
+    }
+
     for(int i = 0; i < 8; i++)
     {
 
       LBraw[i] = shortToVolts(msg.getDataShort(calAcc + 1 * CALIB_DATA_OFFSET + 0 * RAWFORCE_OFFSET + 2 * i));
+
       LFraw[i] = shortToVolts(msg.getDataShort(calAcc + 2 * CALIB_DATA_OFFSET + 1 * RAWFORCE_OFFSET + 2 * i));
       RBraw[i] = shortToVolts(msg.getDataShort(calAcc + 3 * CALIB_DATA_OFFSET + 2 * RAWFORCE_OFFSET + 2 * i));
       RFraw[i] = shortToVolts(msg.getDataShort(calAcc + 4 * CALIB_DATA_OFFSET + 3 * RAWFORCE_OFFSET + 2 * i));
+      // mc_rtc::log::info(
+      //   "LBraw[{}]: {} LFraw[{}]: {} RBraw[{}]: {} RFraw[{}]: {}",
+      //   i,
+      //   mc_rtc::io::to_string(std::array<double, 1>{LBraw[i]}),
+      //   i,
+      //   mc_rtc::io::to_string(std::array<double, 1>{LFraw[i]}),
+      //   i,
+      //   mc_rtc::io::to_string(std::array<double, 1>{RBraw[i]}),
+      //   i,
+      //   mc_rtc::io::to_string(std::array<double, 1>{RFraw[i]})
+      // );
     }
+    // mc_rtc::log::info("raw voltage ori: {}, {}, {}, {}, {}, {}, {}, {}", LBraw[0], LBraw[1], LBraw[2], LBraw[3],
+    // LBraw[4], LBraw[5], LBraw[6], LBraw[7]);
     if(mode_ == Mode::Calibrate)
     {
       if(prevMode != mode_)
