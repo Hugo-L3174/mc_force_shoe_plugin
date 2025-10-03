@@ -41,11 +41,11 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   if(std::filesystem::exists(calibFile))
   {
     mc_rtc::log::info("[ForceShoes] Load calibration from {}", calibFile);
-    mc_rtc::Configuration calib(calibFile);
-    LFUnload = calib("LFUnload");
-    LBUnload = calib("LBUnload");
-    RFUnload = calib("RFUnload");
-    RBUnload = calib("RBUnload");
+    // mc_rtc::Configuration calib(calibFile);
+    // LFUnload = calib("LFUnload");
+    // LBUnload = calib("LBUnload");
+    // RFUnload = calib("RFUnload");
+    // RBUnload = calib("RBUnload");
     mode_ = Mode::Acquire;
   }
 
@@ -75,6 +75,7 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
     ctl.gui()->addElement(
         {"Plugins", "ForceShoePlugin"},
         mc_rtc::gui::Label("Status", [this]() { return mode_ == Mode::Calibrate ? "Calibrating" : "Live"; }),
+        mc_rtc::gui::Label("All sensors calibrated?", [this]() { return checkAllCalibrated() ? "true" : "false"; }),
         mc_rtc::gui::Button("Calibrate",
                             [this]()
                             {
@@ -165,6 +166,39 @@ mc_control::GlobalPlugin::GlobalPluginConfiguration ForceShoePlugin::configurati
   return out;
 }
 
+void ForceShoePlugin::saveCalibration()
+{
+  auto calib = mc_rtc::ConfigurationFile(c_.calibFile);
+  for(const auto & [id, sensor] : forceShoeSensorsById_)
+  {
+    calib.add(id, sensor->unloadedVoltage());
+  }
+  mc_rtc::log::info("[ForceShoes] Saved calibration to {}", c_.calibFile);
+  calib.save();
+}
+
+void ForceShoePlugin::loadCalibration()
+{
+  if(std::filesystem::exists(c_.calibFile))
+  {
+    mc_rtc::log::info("[Forchoes] Load calibration from {}", c_.calibFile);
+    auto calib = mc_rtc::ConfigurationFile(c_.calibFile);
+    for(const auto & [id, sensor] : forceShoeSensorsById_)
+    {
+      if(auto calibValue = calib.find(id))
+      {
+        mc_rtc::log::success("Found calibration for sensor with ID {}, setting unloaded voltage to {}", id,
+                             calibValue->dump(true, true));
+        sensor->setUnloadedVoltage(*calibValue);
+      }
+      else
+      {
+        mc_rtc::log::warning("No calibration found for sensor with ID {}, you should calibrate it", id);
+      }
+    }
+  }
+}
+
 void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
 {
   XsensResultValue res;
@@ -227,6 +261,7 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
       mc_rtc::log::warning("[ForceShoes] No configuration found for sensor with ID {}, ignoring", id_str);
     }
   }
+  loadCalibration();
 }
 
 void ForceShoePlugin::doMtSettings()
@@ -274,9 +309,9 @@ void ForceShoePlugin::dataThread()
 
     auto getDataShort = [&](int device, int i)
     { return msg.getDataShort(calAcc + (device + 1) * CALIB_DATA_OFFSET + device * RAWFORCE_OFFSET + 2 * i); };
-    auto readDeviceVoltage = [this, getDataShort](int device)
+    std::array<double, 8> voltage;
+    auto readDeviceVoltage = [this, voltage, getDataShort](int device) mutable
     {
-      std::array<double, 8> voltage;
       for(int i = 0; i < 8; ++i)
       {
         voltage[i] = shortToVolts(getDataShort(device, i));
@@ -297,15 +332,12 @@ void ForceShoePlugin::dataThread()
         }
         if(sensor.addCalibrationSample(readDeviceVoltage(i), c_.calibrationSamples))
         {
+          saveCalibration();
           calibrated = true;
         }
       }
       else
       {
-        if(i == 0)
-        {
-          // mc_rtc::log::info("raw voltage new: {}", mc_rtc::io::to_string(readDeviceVoltage(i)));
-        }
         sensor.setMeasuredVoltage(readDeviceVoltage(i));
       }
     }
@@ -363,12 +395,12 @@ void ForceShoePlugin::dataThread()
         LFUnload = LFCalib / Nsamples;
         RBUnload = RBCalib / Nsamples;
         RFUnload = RFCalib / Nsamples;
-        auto calib = mc_rtc::ConfigurationFile(c_.calibFile);
-        calib.add("LBUnload", LBUnload);
-        calib.add("LFUnload", LFUnload);
-        calib.add("RBUnload", RBUnload);
-        calib.add("RFUnload", RFUnload);
-        calib.save();
+        // auto calib = mc_rtc::ConfigurationFile(c_.calibFile);
+        // calib.add("LBUnload", LBUnload);
+        // calib.add("LFUnload", LFUnload);
+        // calib.add("RBUnload", RBUnload);
+        // calib.add("RFUnload", RFUnload);
+        // calib.save();
       }
     }
     prevMode = mode_;

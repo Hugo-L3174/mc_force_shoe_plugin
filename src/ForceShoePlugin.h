@@ -141,6 +141,7 @@ struct ForceShoeSensor
     ctl.datastore().make<sva::ForceVecd>(prefix + "::Force", Eigen::Vector6d::Zero());
 
     ctl.gui()->addElement(this, category, Label("name", [this]() { return name_; }),
+                          Label("Calibrated", [this]() { return calibrated_ ? "true" : "false"; }),
                           ArrayLabel("Unloaded Voltage", [this]() { return unloadedVoltage(); }),
                           ArrayLabel("Measured Voltage", [this]() { return measuredVoltage(); }),
                           ArrayLabel("Calibrated Voltage", [this]() { return calibratedVoltage(); }),
@@ -158,7 +159,7 @@ struct ForceShoeSensor
     category.push_back(name_);
     auto prefix = mc_rtc::io::to_string(category, "::");
     ctl.datastore().remove(prefix + "::Force");
-    ctl.gui()->removeCategory(category);
+    ctl.gui()->removeElements(this);
   }
 
   void setMeasuredVoltage(const RawMeasurementArray & voltage)
@@ -196,6 +197,7 @@ struct ForceShoeSensor
       {
         unloadedVoltage_[i] = calibrationVoltageAccumulator_[i] / static_cast<double>(samples_);
       }
+      calibrated_ = true;
       samples_ = 0;
       mc_rtc::log::info("[ForceShoeSensor {}] Calibration done, unloaded voltage: {}", name_,
                         mc_rtc::io::to_string(unloadedVoltage_));
@@ -217,6 +219,14 @@ struct ForceShoeSensor
     return unloadedVoltage_;
   }
 
+  void setUnloadedVoltage(const VoltageArray & unloadedVoltage)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    unloadedVoltage_ = unloadedVoltage;
+    mc_rtc::log::info("set unloadedVoltage for sensor {}: {}", name_, mc_rtc::io::to_string(unloadedVoltage_));
+    calibrated_ = true;
+  }
+
   VoltageArray calibratedVoltage() const
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -227,6 +237,11 @@ struct ForceShoeSensor
   {
     std::lock_guard<std::mutex> lock(mutex_);
     return measuredVoltage_;
+  }
+
+  inline bool calibrated() const noexcept
+  {
+    return calibrated_;
   }
 
 private:
@@ -269,6 +284,7 @@ private:
   Eigen::MatrixXd ampCalMat_;
   sva::ForceVecd measuredForce_ = sva::ForceVecd::Zero();
 
+  bool calibrated_ = false;
   bool inCtl_ = false;
   mutable std::mutex mutex_;
   mutable std::mutex calibMutex_;
@@ -287,6 +303,14 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
   mc_control::GlobalPlugin::GlobalPluginConfiguration configuration() override;
 
   ~ForceShoePlugin() override;
+
+  void saveCalibration();
+  void loadCalibration();
+  bool checkAllCalibrated() const
+  {
+    return std::all_of(forceShoeSensorsById_.begin(), forceShoeSensorsById_.end(),
+                       [](const auto & kv) { return kv.second->calibrated(); });
+  }
 
   //////////////////////////////////////////////////////////////////////////
   // doHardwareConnect
