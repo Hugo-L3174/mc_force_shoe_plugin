@@ -31,23 +31,9 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
 
   // Loading plugin config from schema
   c_.load(config);
-  mc_rtc::log::warning("schema config is:\n{}", c_.dump(true, true));
   c_.addToGUI(*ctl.gui(), {"Plugins", "ForceShoePlugin", "Plugin Configuration"}, "Configure");
 
   cmt3_.reset(new xsens::Cmt3);
-
-  const auto & calibFile = c_.calibFile;
-  config("calibFile", calibFile);
-  if(std::filesystem::exists(calibFile))
-  {
-    mc_rtc::log::info("[ForceShoes] Load calibration from {}", calibFile);
-    // mc_rtc::Configuration calib(calibFile);
-    // LFUnload = calib("LFUnload");
-    // LBUnload = calib("LBUnload");
-    // RFUnload = calib("RFUnload");
-    // RBUnload = calib("RBUnload");
-    mode_ = Mode::Acquire;
-  }
 
   // Putting mode in datastore (true is live, false is replay), true by default
   if(auto ctlLiveMode = ctl.config().find<bool>("ForceShoes", "liveMode"))
@@ -90,30 +76,34 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
                               }
                             }));
     // TODO: after connecting
-    ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LFForce", sva::ForceVecd::Zero());
-    ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LBForce", sva::ForceVecd::Zero());
-    ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RFForce", sva::ForceVecd::Zero());
-    ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RBForce", sva::ForceVecd::Zero());
-
-    ctl.datastore().make_call("ForceShoePlugin::GetLFForce", [&ctl, this]()
-                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce"); });
-    ctl.datastore().make_call("ForceShoePlugin::GetLBForce", [&ctl, this]()
-                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBForce"); });
-    ctl.datastore().make_call("ForceShoePlugin::GetRFForce", [&ctl, this]()
-                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce"); });
-    ctl.datastore().make_call("ForceShoePlugin::GetRBForce", [&ctl, this]()
-                              { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce"); });
+    // ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LFForce", sva::ForceVecd::Zero());
+    // ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LBForce", sva::ForceVecd::Zero());
+    // ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RFForce", sva::ForceVecd::Zero());
+    // ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RBForce", sva::ForceVecd::Zero());
+    //
+    // ctl.datastore().make_call("ForceShoePlugin::GetLFForce", [&ctl, this]()
+    //                           { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce"); });
+    // ctl.datastore().make_call("ForceShoePlugin::GetLBForce", [&ctl, this]()
+    //                           { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBForce"); });
+    // ctl.datastore().make_call("ForceShoePlugin::GetRFForce", [&ctl, this]()
+    //                           { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce"); });
+    // ctl.datastore().make_call("ForceShoePlugin::GetRBForce", [&ctl, this]()
+    //                           { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce"); });
   }
   else
   {
-    ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
-                              [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce"); });
-    ctl.datastore().make_call("ForceShoePlugin::GetLBForce",
-                              [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LBForce"); });
-    ctl.datastore().make_call("ForceShoePlugin::GetRFForce",
-                              [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RFForce"); });
-    ctl.datastore().make_call("ForceShoePlugin::GetRBForce",
-                              [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RBForce"); });
+    // ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
+    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce");
+    //                           });
+    // ctl.datastore().make_call("ForceShoePlugin::GetLBForce",
+    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LBForce");
+    //                           });
+    // ctl.datastore().make_call("ForceShoePlugin::GetRFForce",
+    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RFForce");
+    //                           });
+    // ctl.datastore().make_call("ForceShoePlugin::GetRBForce",
+    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RBForce");
+    //                           });
   }
 
   mc_rtc::log::info("ForceShoePlugin::reset called");
@@ -128,30 +118,11 @@ void ForceShoePlugin::before(mc_control::MCGlobalController & controller)
 
   if(c_.liveMode)
   {
-    auto & ctl = controller.controller();
-    auto & LF = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce");
-    auto & LB = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBForce");
-    auto & RF = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce");
-    auto & RB = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce");
-
-    std::lock_guard<std::mutex> lock(mutex_);
-    computeAmpCalMat();
-    computeUDiff();
-    computeForceVec();
-
-    LB = sva::ForceVecd(Eigen::Vector3d{LBforcevec[3], LBforcevec[4], LBforcevec[5]},
-                        Eigen::Vector3d{LBforcevec[0], LBforcevec[1], LBforcevec[2]});
-    LF = sva::ForceVecd(Eigen::Vector3d{LFforcevec[3], LFforcevec[4], LFforcevec[5]},
-                        Eigen::Vector3d{LFforcevec[0], LFforcevec[1], LFforcevec[2]});
-    RB = sva::ForceVecd(Eigen::Vector3d{RBforcevec[3], RBforcevec[4], RBforcevec[5]},
-                        Eigen::Vector3d{RBforcevec[0], RBforcevec[1], RBforcevec[2]});
-    RF = sva::ForceVecd(Eigen::Vector3d{RFforcevec[3], RFforcevec[4], RFforcevec[5]},
-                        Eigen::Vector3d{RFforcevec[0], RFforcevec[1], RFforcevec[2]});
-
-    // mc_rtc::log::info("LB torque: {}, force: {}", LB.couple().transpose(), LB.force().transpose());
-    // mc_rtc::log::info("LF torque: {}, force: {}", LF.couple().transpose(), LF.force().transpose());
-    // mc_rtc::log::info("RB torque: {}, force: {}", RB.couple().transpose(), RB.force().transpose());
-    // mc_rtc::log::info("RF torque: {}, force: {}", RF.couple().transpose(), RF.force().transpose());
+    // auto & ctl = controller.controller();
+    // auto & LF = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce");
+    // auto & LB = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBForce");
+    // auto & RF = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce");
+    // auto & RB = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce");
   }
 }
 
@@ -195,6 +166,16 @@ void ForceShoePlugin::loadCalibration()
       {
         mc_rtc::log::warning("No calibration found for sensor with ID {}, you should calibrate it", id);
       }
+    }
+    if(checkAllCalibrated())
+    {
+      mc_rtc::log::success("[ForceShoes] All sensors are calibrated, starting in acquisition mode");
+      mode_ = Mode::Acquire;
+    }
+    else
+    {
+      mc_rtc::log::warning("[ForceShoes] Not all sensors are calibrated, starting in calibration mode");
+      mode_ = Mode::Calibrate;
     }
   }
 }
@@ -345,63 +326,6 @@ void ForceShoePlugin::dataThread()
     {
       mode_ = Mode::Acquire;
       mc_rtc::log::info("[ForceShoes] Calibration completed, switching to Acquire mode");
-    }
-
-    for(int i = 0; i < 8; i++)
-    {
-
-      LBraw[i] = shortToVolts(msg.getDataShort(calAcc + 1 * CALIB_DATA_OFFSET + 0 * RAWFORCE_OFFSET + 2 * i));
-
-      LFraw[i] = shortToVolts(msg.getDataShort(calAcc + 2 * CALIB_DATA_OFFSET + 1 * RAWFORCE_OFFSET + 2 * i));
-      RBraw[i] = shortToVolts(msg.getDataShort(calAcc + 3 * CALIB_DATA_OFFSET + 2 * RAWFORCE_OFFSET + 2 * i));
-      RFraw[i] = shortToVolts(msg.getDataShort(calAcc + 4 * CALIB_DATA_OFFSET + 3 * RAWFORCE_OFFSET + 2 * i));
-      // mc_rtc::log::info(
-      //   "LBraw[{}]: {} LFraw[{}]: {} RBraw[{}]: {} RFraw[{}]: {}",
-      //   i,
-      //   mc_rtc::io::to_string(std::array<double, 1>{LBraw[i]}),
-      //   i,
-      //   mc_rtc::io::to_string(std::array<double, 1>{LFraw[i]}),
-      //   i,
-      //   mc_rtc::io::to_string(std::array<double, 1>{RBraw[i]}),
-      //   i,
-      //   mc_rtc::io::to_string(std::array<double, 1>{RFraw[i]})
-      // );
-    }
-    // mc_rtc::log::info("raw voltage ori: {}, {}, {}, {}, {}, {}, {}, {}", LBraw[0], LBraw[1], LBraw[2], LBraw[3],
-    // LBraw[4], LBraw[5], LBraw[6], LBraw[7]);
-    if(mode_ == Mode::Calibrate)
-    {
-      if(prevMode != mode_)
-      {
-        calibSamples_ = 0;
-        LBCalib.setZero();
-        LFCalib.setZero();
-        RBCalib.setZero();
-        RFCalib.setZero();
-      }
-      for(int i = 0; i < 6; ++i)
-      {
-        LBCalib[i] += LBraw[i];
-        LFCalib[i] += LFraw[i];
-        RBCalib[i] += RBraw[i];
-        RFCalib[i] += RFraw[i];
-      }
-      calibSamples_ += 1;
-      const auto Nsamples = c_.calibrationSamples;
-      if(calibSamples_ == Nsamples)
-      {
-        mode_ = Mode::Acquire;
-        LBUnload = LBCalib / Nsamples;
-        LFUnload = LFCalib / Nsamples;
-        RBUnload = RBCalib / Nsamples;
-        RFUnload = RFCalib / Nsamples;
-        // auto calib = mc_rtc::ConfigurationFile(c_.calibFile);
-        // calib.add("LBUnload", LBUnload);
-        // calib.add("LFUnload", LFUnload);
-        // calib.add("RBUnload", RBUnload);
-        // calib.add("RFUnload", RFUnload);
-        // calib.save();
-      }
     }
     prevMode = mode_;
   }
