@@ -5,13 +5,11 @@
 #pragma once
 
 #include <mc_control/GlobalPlugin.h>
+#include <mc_filter/LowPass.h>
 #include <mc_rtc/Schema.h>
 #include <mc_rtc/io_utils.h>
-#include <SpaceVecAlg/EigenTypedef.h>
 #include <SpaceVecAlg/SpaceVecAlg>
 #include <cstring>
-#include <iomanip>
-#include <sstream>
 #include <thread>
 
 #include "cmt3.h"
@@ -22,6 +20,7 @@ using namespace xsens;
 constexpr double DEFAULT_AMP_GAIN = 4.7;
 constexpr int CALIB_DATA_OFFSET = 3 * 12; // 3*12 bytes
 constexpr int RAWFORCE_OFFSET = 16; // 16 bytes
+constexpr double DEFAULT_LOWPASS_PERIOD = 0.1; // 16 bytes
 
 namespace mc_force_shoe_plugin
 {
@@ -59,6 +58,12 @@ struct ForceSensorSchema
                        mc_rtc::schema::None,
                        Eigen::MatrixXd::Zero(6, 6))
   MC_RTC_SCHEMA_MEMBER(ForceSensorSchema, double, ampGain, "Amplification gain", mc_rtc::schema::None, DEFAULT_AMP_GAIN)
+  MC_RTC_SCHEMA_MEMBER(ForceSensorSchema,
+                       double,
+                       lowPassPeriod,
+                       "Period for low pass filtering",
+                       mc_rtc::schema::None,
+                       DEFAULT_LOWPASS_PERIOD)
 };
 
 struct ForceShoeSensorSchema
@@ -239,6 +244,8 @@ struct ForceShoeSensor
       }
     }
 
+    updateForceFilterConfig(ctl.timeStep);
+
     using namespace mc_rtc::gui;
     category.push_back(name_);
     auto prefix = mc_rtc::io::to_string(category, "::");
@@ -254,7 +261,15 @@ struct ForceShoeSensor
                           ArrayLabel("Unloaded Voltage", [this]() { return unloadedVoltage(); }),
                           ArrayLabel("Measured Voltage", [this]() { return measuredVoltage(); }),
                           ArrayLabel("Calibrated Voltage", [this]() { return calibratedVoltage(); }),
-                          ArrayLabel("Force", [this]() { return measuredForce().vector(); }));
+                          ArrayLabel("Measured Force Raw (FS frame)", [this]() { return measuredForce().vector(); }),
+                          ArrayLabel("Filtered Force (FS frame)", [this]() { return filteredForce(); }),
+                          NumberInput(
+                              "Filter LowPass Period [s]", [this]() { return config_.forceSensor.lowPassPeriod; },
+                              [this, &ctl](double period)
+                              {
+                                config_.forceSensor.lowPassPeriod = period;
+                                updateForceFilterConfig(ctl.timeStep);
+                              }));
 
     if(updateRobotSensor_)
     {
@@ -274,6 +289,12 @@ struct ForceShoeSensor
     }
   }
 
+  void updateForceFilterConfig(double dt)
+  {
+    forceFilter_ = std::make_unique<mc_filter::LowPass<sva::ForceVecd>>(dt, config_.forceSensor.lowPassPeriod);
+    resetForceFilter_ = true;
+  }
+
   void updateRobotSensor(mc_control::MCController & ctl)
   {
     if(updateRobotSensor_)
@@ -283,7 +304,7 @@ struct ForceShoeSensor
       auto & data = *robot.data();
       auto & fs = data.forceSensors[data.forceSensorsIndex.at(sensorConfig.robotForceSensorName)];
 
-      auto measured = measuredForce();
+      auto measured = filteredForce();
       const auto & flipAxis = sensorConfig.flipMeasurementAxis;
       // Flip force along axis (left-handed sensor)
       if(flipAxis.x)
@@ -379,6 +400,7 @@ struct ForceShoeSensor
         unloadedVoltage_[i] = calibrationVoltageAccumulator_[i] / static_cast<double>(samples_);
       }
       calibrated_ = true;
+      resetForceFilter_ = true;
       samples_ = 0;
       mc_rtc::log::info("[ForceShoeSensor {}] Calibration done, unloaded voltage: {}", name_,
                         mc_rtc::io::to_string(unloadedVoltage_));
@@ -392,6 +414,19 @@ struct ForceShoeSensor
   {
     std::lock_guard<std::mutex> lock(mutex_);
     return measuredForce_;
+  }
+
+  sva::ForceVecd filteredForce() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if(forceFilter_)
+    {
+      return forceFilter_->eval();
+    }
+    else
+    {
+      return measuredForce_;
+    }
   }
 
   VoltageArray unloadedVoltage() const
@@ -436,6 +471,12 @@ private:
     Eigen::VectorXd forceVec = ampCalMat_ * voltVec;
     measuredForce_ = sva::ForceVecd(Eigen::Vector3d{forceVec[3], forceVec[4], forceVec[5]},
                                     Eigen::Vector3d{forceVec[0], forceVec[1], forceVec[2]});
+    if(resetForceFilter_)
+    {
+      forceFilter_->reset(measuredForce_);
+      resetForceFilter_ = false;
+    }
+    forceFilter_->update(measuredForce_);
   }
 
   /// compute amplified calibration matrixes (raw/amplifier gain/excitation)
@@ -465,6 +506,8 @@ private:
   /// Amplified calibration matrixes: result of rawCalMat/amplifierGain/Excitation voltage
   Eigen::MatrixXd ampCalMat_;
   sva::ForceVecd measuredForce_ = sva::ForceVecd::Zero();
+  std::unique_ptr<mc_filter::LowPass<sva::ForceVecd>> forceFilter_;
+  bool resetForceFilter_ = true;
 
   // map of robot name to sensor name
   std::optional<UpdateRobotSensor> updateRobotSensor_ = std::nullopt;
