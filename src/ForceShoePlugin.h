@@ -76,10 +76,22 @@ struct RobotForceSensorEntrySchema
   MC_RTC_NEW_SCHEMA(RobotForceSensorEntrySchema)
   MC_RTC_SCHEMA_MEMBER(RobotForceSensorEntrySchema,
                        std::string,
+                       robotForceSensorName,
+                       "Name of the force sensor on the robot",
+                       mc_rtc::schema::None,
+                       "")
+  MC_RTC_SCHEMA_MEMBER(RobotForceSensorEntrySchema,
+                       std::string,
                        serialNumber,
                        "Serial number of the force sensor",
                        mc_rtc::schema::None,
-                       "");
+                       "")
+  MC_RTC_SCHEMA_MEMBER(RobotForceSensorEntrySchema,
+                       double,
+                       guiScale,
+                       "Display scale of the force sensor arrow",
+                       mc_rtc::schema::None,
+                       1.0)
 };
 
 struct ForceShoePluginSchema
@@ -117,8 +129,8 @@ struct ForceShoePluginSchema
                        "List of force shoe sensors",
                        mc_rtc::schema::None,
                        VectorForceShoeSensor{})
-  // Link force shoe sensors to robot force sensors
-  using RobotForceSensorMap = std::map<std::string, RobotForceSensorEntrySchema>;
+  // Map of robot name to robot force sensor configs
+  using RobotForceSensorMap = std::map<std::string, std::vector<RobotForceSensorEntrySchema>>;
   MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
                        RobotForceSensorMap,
                        robotForceSensors,
@@ -134,6 +146,12 @@ void exit_on_error(XsensResultValue res, const std::string & comment);
 
 struct ForceShoeSensor
 {
+  struct UpdateRobotSensor
+  {
+    std::string robotName;
+    RobotForceSensorEntrySchema fsEntrySchema;
+  };
+
   // Raw data vectors (G0, G1, G2, G3, G4, G5, G6, ref)
   using RawMeasurementArray = std::array<double, 8>;
   using VoltageArray = std::array<double, 6>; // FIXME: should be 6 but segfaults
@@ -154,12 +172,53 @@ struct ForceShoeSensor
   {
     if(inCtl_) return;
     inCtl_ = true;
+    guiCategory_ = category;
+
+    // Check if the controller has a force sensor defined in the plugin's configuration
+    const auto & robotSensorsConfig = pluginConfig_.robotForceSensors;
+    // For each robot in the configuration
+    for(const auto & [robotName, robotForceSensors] : robotSensorsConfig)
+    {
+      mc_rtc::log::info("robot name is {}", ctl.robot().name());
+      if(ctl.hasRobot(robotName))
+      {
+        mc_rtc::log::info("[ForceShoeSensor {}] Checking mapping to robot {}", name_, robotName);
+        auto & robot = ctl.robot(robotName);
+        for(const auto & sensor : robotForceSensors)
+        {
+          mc_rtc::log::info("  robot sensor name is {}", sensor.robotForceSensorName);
+        }
+        auto it = std::find_if(robotForceSensors.begin(), robotForceSensors.end(),
+                               [this](const auto & entry)
+                               {
+                                 mc_rtc::log::info("Comparing {} with {}", entry.serialNumber,
+                                                   config_.forceSensor.serialNumber);
+                                 return entry.serialNumber == config_.forceSensor.serialNumber;
+                               });
+        if(it != robotForceSensors.end())
+        {
+          const auto & robotSensorName = it->robotForceSensorName;
+          mc_rtc::log::info("[ForceShoeSensor {}] Found mapping to robot {} force sensor {}", name_, robot.name(),
+                            robotSensorName);
+          if(robot.hasForceSensor(robotSensorName))
+          {
+            updateRobotSensor_ = {robotName, *it};
+            mc_rtc::log::info("[ForceShoeSensor {}] Mapping to robot {} force sensor {}", name_, robot.name(),
+                              robotSensorName);
+          }
+        }
+      }
+    }
 
     using namespace mc_rtc::gui;
     category.push_back(name_);
     auto prefix = mc_rtc::io::to_string(category, "::");
     // if live mode
     ctl.datastore().make<sva::ForceVecd>(prefix + "::Force", Eigen::Vector6d::Zero());
+    // else
+    // ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
+    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce");
+    //                           });
 
     ctl.gui()->addElement(this, category, Label("name", [this]() { return name_; }),
                           Label("Calibrated", [this]() { return calibrated_ ? "true" : "false"; }),
@@ -167,39 +226,42 @@ struct ForceShoeSensor
                           ArrayLabel("Measured Voltage", [this]() { return measuredVoltage(); }),
                           ArrayLabel("Calibrated Voltage", [this]() { return calibratedVoltage(); }),
                           ArrayLabel("Force", [this]() { return measuredForce().vector(); }));
-    // else
-    // ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
-    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce");
-    //                           });
 
-    // Check if the controller has a force sensor defined in the plugin's configuration
+    if(updateRobotSensor_)
+    {
+      const auto & robotName = updateRobotSensor_->robotName;
+      const auto & sensorName = updateRobotSensor_->fsEntrySchema.robotForceSensorName;
+      const auto & guiScale = updateRobotSensor_->fsEntrySchema.guiScale;
+      category.push_back("Force Arrows");
+
+      mc_rtc::gui::ForceConfig forceConfig;
+      forceConfig.scale *= guiScale;
+      ctl.gui()->addElement(this, category,
+                            Force(
+                                robotName + "::" + sensorName, forceConfig, [robotName, sensorName, &ctl]()
+                                { return ctl.robot(robotName).forceSensor(sensorName).wrench(); },
+                                [robotName, sensorName, &ctl]()
+                                { return ctl.robot(robotName).frame(sensorName).position(); }));
+    }
   }
 
-  void updateRobotSensor(mc_rbdyn::Robot & robot)
+  void updateRobotSensor(mc_control::MCController & ctl)
   {
-    // XXX should be mapped once and updated if the sensor exists
-    const auto & robotSensorsConfig = pluginConfig_.robotForceSensors;
-    auto it = std::find_if(robotSensorsConfig.begin(), robotSensorsConfig.end(), [this](const auto & entry)
-                           { return entry.second.serialNumber == config_.forceSensor.serialNumber; });
-    if(it != robotSensorsConfig.end())
+    if(updateRobotSensor_)
     {
-      const auto & sensorName = it->first;
-      if(robot.hasForceSensor(sensorName))
-      {
-        auto & data = *robot.data();
-        auto & fs = data.forceSensors[data.forceSensorsIndex.at(sensorName)];
-        fs.wrench(measuredForce());
-      }
-      else
-      {
-        mc_rtc::log::warning("[ForceShoeSensor {}] Robot {} has no force sensor named {}", name_, robot.name(),
-                             sensorName);
-      }
+      const auto & [robotName, sensorConfig] = *updateRobotSensor_;
+      auto & robot = ctl.robot(robotName);
+      auto & data = *robot.data();
+      auto & fs = data.forceSensors[data.forceSensorsIndex.at(sensorConfig.robotForceSensorName)];
+      fs.wrench(measuredForce());
     }
-    else
+
+    if(guiCategory_)
     {
-      // mc_rtc::log::info("[ForceShoeSensor {}] No mapping found for force sensor with serial number {}",
-      //                   name_, config_.forceSensor.serialNumber);
+      auto category = *guiCategory_;
+      category.push_back(name_);
+      // publish to datastore
+      ctl.datastore().get<sva::ForceVecd>(mc_rtc::io::to_string(category, "::") + "::Force") = measuredForce();
     }
   }
 
@@ -353,6 +415,10 @@ private:
   /// Amplified calibration matrixes: result of rawCalMat/amplifierGain/Excitation voltage
   Eigen::MatrixXd ampCalMat_;
   sva::ForceVecd measuredForce_ = sva::ForceVecd::Zero();
+
+  // map of robot name to sensor name
+  std::optional<UpdateRobotSensor> updateRobotSensor_ = std::nullopt;
+  std::optional<std::vector<std::string>> guiCategory_ = std::nullopt;
 
   bool calibrated_ = false;
   bool inCtl_ = false;

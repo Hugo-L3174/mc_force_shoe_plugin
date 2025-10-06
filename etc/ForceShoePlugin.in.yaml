@@ -138,7 +138,10 @@ forceShoeSensors:
 # If defined and the sensor is connected,
 # This links force sensors from the robot module with force measurement from the shoes
 robotForceSensors:
-  LeftHandForceSensor:
-    serialNumber: !!str "FT15250"
-  RightHandForceSensor:
+  rhps1:
+  - robotForceSensorName: LeftHandForceSensor
     serialNumber: !!str "FT15252"
+    guiScale: 5
+  - robotForceSensorName:  RightHandForceSensor
+    serialNumber: !!str "FT15250"
+    guiScale: 5

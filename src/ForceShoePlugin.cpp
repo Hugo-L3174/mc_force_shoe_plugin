@@ -114,7 +114,7 @@ void ForceShoePlugin::before(mc_control::MCGlobalController & controller)
   for(const auto & [_, forceSensor] : forceShoeSensorsById_)
   {
     forceSensor->addToCtl(controller.controller(), {"Plugins", "ForceShoePlugin", "Sensors"});
-    forceSensor->updateRobotSensor(controller.robot());
+    forceSensor->updateRobotSensor(controller.controller());
   }
 
   if(c_.liveMode)
