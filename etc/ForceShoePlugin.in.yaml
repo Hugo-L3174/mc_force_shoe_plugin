@@ -140,8 +140,16 @@ forceShoeSensors:
 robotForceSensors:
   rhps1:
   - robotForceSensorName: LeftHandForceSensor
-    serialNumber: !!str "FT15252"
-    guiScale: 5
+    serialNumber: !!str "FT15249"
+    guiScale: 10
+    flipMeasurementAxis:
+      x: true
+      y: false
+      z: false
   - robotForceSensorName:  RightHandForceSensor
-    serialNumber: !!str "FT15250"
-    guiScale: 5
+    serialNumber: !!str "FT15251"
+    guiScale: 10
+    flipMeasurementAxis:
+      x: true
+      y: false
+      z: false

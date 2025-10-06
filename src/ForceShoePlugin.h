@@ -70,6 +70,29 @@ struct ForceShoeSensorSchema
 #undef MEMBER
 };
 
+struct RobotForceSensorEntryFlipAxisSchema
+{
+  MC_RTC_NEW_SCHEMA(RobotForceSensorEntryFlipAxisSchema)
+  MC_RTC_SCHEMA_MEMBER(RobotForceSensorEntryFlipAxisSchema,
+                       bool,
+                       x,
+                       "flip X axis measurement",
+                       mc_rtc::schema::None,
+                       false)
+  MC_RTC_SCHEMA_MEMBER(RobotForceSensorEntryFlipAxisSchema,
+                       bool,
+                       y,
+                       "flip Y axis measurement",
+                       mc_rtc::schema::None,
+                       false)
+  MC_RTC_SCHEMA_MEMBER(RobotForceSensorEntryFlipAxisSchema,
+                       bool,
+                       z,
+                       "flip Z axis measurement",
+                       mc_rtc::schema::None,
+                       false)
+};
+
 /// Mapping of robot force sensors to force shoe sensors
 struct RobotForceSensorEntrySchema
 {
@@ -92,6 +115,12 @@ struct RobotForceSensorEntrySchema
                        "Display scale of the force sensor arrow",
                        mc_rtc::schema::None,
                        1.0)
+  MC_RTC_SCHEMA_MEMBER(RobotForceSensorEntrySchema,
+                       RobotForceSensorEntryFlipAxisSchema,
+                       flipMeasurementAxis,
+                       "flip measurment along axis",
+                       mc_rtc::schema::None,
+                       RobotForceSensorEntryFlipAxisSchema{})
 };
 
 struct ForceShoePluginSchema
@@ -253,7 +282,28 @@ struct ForceShoeSensor
       auto & robot = ctl.robot(robotName);
       auto & data = *robot.data();
       auto & fs = data.forceSensors[data.forceSensorsIndex.at(sensorConfig.robotForceSensorName)];
-      fs.wrench(measuredForce());
+
+      auto measured = measuredForce();
+      const auto & flipAxis = sensorConfig.flipMeasurementAxis;
+      // Flip force along axis (left-handed sensor)
+      if(flipAxis.x)
+      {
+        measured.force().x() *= -1.;
+        measured.couple().x() *= -1.;
+      }
+      if(flipAxis.y)
+      {
+        mc_rtc::log::info("{} flipped y axis", sensorConfig.robotForceSensorName);
+        measured.force().y() *= -1.;
+        measured.couple().y() *= -1.;
+      }
+      if(flipAxis.z)
+      {
+        measured.force().z() *= -1.;
+        measured.couple().z() *= -1.;
+      }
+
+      fs.wrench(measured);
     }
 
     if(guiCategory_)
