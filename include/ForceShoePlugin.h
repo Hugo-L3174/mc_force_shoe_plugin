@@ -60,15 +60,9 @@ struct ForceShoeSensor
     // For each robot in the configuration
     for(const auto & [robotName, robotForceSensors] : robotSensorsConfig)
     {
-      mc_rtc::log::info("robot name is {}", ctl.robot().name());
       if(ctl.hasRobot(robotName))
       {
-        mc_rtc::log::info("[ForceShoeSensor {}] Checking mapping to robot {}", name_, robotName);
         auto & robot = ctl.robot(robotName);
-        for(const auto & sensor : robotForceSensors)
-        {
-          mc_rtc::log::info("  robot sensor name is {}", sensor.robotForceSensorName);
-        }
         auto it = std::find_if(robotForceSensors.begin(), robotForceSensors.end(),
                                [this](const auto & entry)
                                {
@@ -97,26 +91,24 @@ struct ForceShoeSensor
     category.push_back(name_);
     auto prefix = mc_rtc::io::to_string(category, "::");
     // if live mode
-    ctl.datastore().make<sva::ForceVecd>(prefix + "::Force", Eigen::Vector6d::Zero());
-    // else
-    // ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
-    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce");
-    //                           });
-
-    ctl.gui()->addElement(this, category, Label("name", [this]() { return name_; }),
-                          Label("Calibrated", [this]() { return calibrated_ ? "true" : "false"; }),
-                          ArrayLabel("Unloaded Voltage", [this]() { return unloadedVoltage(); }),
-                          ArrayLabel("Measured Voltage", [this]() { return measuredVoltage(); }),
-                          ArrayLabel("Calibrated Voltage", [this]() { return calibratedVoltage(); }),
-                          ArrayLabel("Measured Force Raw (FS frame)", [this]() { return measuredForce().vector(); }),
-                          ArrayLabel("Filtered Force (FS frame)", [this]() { return filteredForce(); }),
-                          NumberInput(
-                              "Filter LowPass Period [s]", [this]() { return config_.forceSensor.lowPassPeriod; },
-                              [this, &ctl](double period)
-                              {
-                                config_.forceSensor.lowPassPeriod = period;
-                                updateForceFilterConfig(ctl.timeStep);
-                              }));
+    if(pluginConfig_.liveMode)
+    {
+      ctl.datastore().make<sva::ForceVecd>(prefix + "::Force", Eigen::Vector6d::Zero());
+      ctl.gui()->addElement(this, category, Label("name", [this]() { return name_; }),
+                            Label("Calibrated", [this]() { return calibrated_ ? "true" : "false"; }),
+                            ArrayLabel("Unloaded Voltage", [this]() { return unloadedVoltage(); }),
+                            ArrayLabel("Measured Voltage", [this]() { return measuredVoltage(); }),
+                            ArrayLabel("Calibrated Voltage", [this]() { return calibratedVoltage(); }),
+                            ArrayLabel("Measured Force Raw (FS frame)", [this]() { return measuredForce().vector(); }),
+                            ArrayLabel("Filtered Force (FS frame)", [this]() { return filteredForce(); }),
+                            NumberInput(
+                                "Filter LowPass Period [s]", [this]() { return config_.forceSensor.lowPassPeriod; },
+                                [this, &ctl](double period)
+                                {
+                                  config_.forceSensor.lowPassPeriod = period;
+                                  updateForceFilterConfig(ctl.timeStep);
+                                }));
+    }
 
     if(updateRobotSensor_)
     {
@@ -182,22 +174,6 @@ struct ForceShoeSensor
       ctl.datastore().get<sva::ForceVecd>(mc_rtc::io::to_string(category, "::") + "::Force") = measuredForce();
     }
   }
-
-  // auto setForceShoeSensorValue =
-  //     [this](const std::string & datastoreName, const std::string & robotName, const std::string & sensorName)
-  // {
-  //   auto & data = *robot(robotName).data();
-  //   auto & fs = data.forceSensors[data.forceSensorsIndex.at(sensorName)];
-  //   if(this->datastore().has(datastoreName))
-  //   {
-  //     auto & wrench = this->datastore().get<sva::ForceVecd>(datastoreName);
-  //     fs.wrench(wrench);
-  //   }
-  //   else
-  //   {
-  //     fs.wrench(sva::ForceVecd::Zero());
-  //   }
-  // };
 
   void removeFromCtl(mc_control::MCController & ctl, std::vector<std::string> category)
   {

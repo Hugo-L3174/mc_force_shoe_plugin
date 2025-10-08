@@ -108,6 +108,9 @@ struct RobotForceSensorEntrySchema
                        RobotForceSensorEntryFlipAxisSchema{})
 };
 
+/**
+ * Main configuration schema for the ForceShoePlugin
+ */
 struct ForceShoePluginSchema
 {
   MC_RTC_NEW_SCHEMA(ForceShoePluginSchema)
@@ -151,4 +154,5 @@ struct ForceShoePluginSchema
                        "Optional mapping to robot force sensors",
                        mc_rtc::schema::None,
                        RobotForceSensorMap{})
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema, bool, debug, "Additional debug information", mc_rtc::schema::None, false)
 };

@@ -27,7 +27,6 @@ ForceShoePlugin::~ForceShoePlugin()
 void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc_rtc::Configuration & config)
 {
   auto & ctl = controller.controller();
-  mc_rtc::log::info("ForceShoePlugin::init called with configuration:\n{}", config.dump(true, true));
 
   // Loading plugin config from schema
   c_.load(config);
@@ -75,37 +74,7 @@ void ForceShoePlugin::reset(mc_control::MCGlobalController & controller)
                                 mode_ = Mode::Calibrate;
                               }
                             }));
-    // TODO: after connecting
-    // ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LFForce", sva::ForceVecd::Zero());
-    // ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::LBForce", sva::ForceVecd::Zero());
-    // ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RFForce", sva::ForceVecd::Zero());
-    // ctl.datastore().make<sva::ForceVecd>("ForceShoePlugin::RBForce", sva::ForceVecd::Zero());
-    //
-    // ctl.datastore().make_call("ForceShoePlugin::GetLFForce", [&ctl, this]()
-    //                           { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce"); });
-    // ctl.datastore().make_call("ForceShoePlugin::GetLBForce", [&ctl, this]()
-    //                           { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBForce"); });
-    // ctl.datastore().make_call("ForceShoePlugin::GetRFForce", [&ctl, this]()
-    //                           { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce"); });
-    // ctl.datastore().make_call("ForceShoePlugin::GetRBForce", [&ctl, this]()
-    //                           { return ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce"); });
   }
-  else
-  {
-    // ctl.datastore().make_call("ForceShoePlugin::GetLFForce",
-    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LFForce");
-    //                           });
-    // ctl.datastore().make_call("ForceShoePlugin::GetLBForce",
-    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::LBForce");
-    //                           });
-    // ctl.datastore().make_call("ForceShoePlugin::GetRFForce",
-    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RFForce");
-    //                           });
-    // ctl.datastore().make_call("ForceShoePlugin::GetRBForce",
-    //                           [&ctl, this]() { return ctl.datastore().get<sva::ForceVecd>("ReplayPlugin::RBForce");
-    //                           });
-  }
-
   mc_rtc::log::info("ForceShoePlugin::reset called");
 }
 
@@ -115,15 +84,6 @@ void ForceShoePlugin::before(mc_control::MCGlobalController & controller)
   {
     forceSensor->addToCtl(controller.controller(), {"Plugins", "ForceShoePlugin", "Sensors"});
     forceSensor->updateRobotSensor(controller.controller());
-  }
-
-  if(c_.liveMode)
-  {
-    // auto & ctl = controller.controller();
-    // auto & LF = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LFForce");
-    // auto & LB = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::LBForce");
-    // auto & RF = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RFForce");
-    // auto & RB = ctl.datastore().get<sva::ForceVecd>("ForceShoePlugin::RBForce");
   }
 }
 
