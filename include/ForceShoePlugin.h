@@ -299,7 +299,7 @@ private:
       forceFilter_->reset(measuredForce_);
       resetForceFilter_ = false;
     }
-    forceFilter_->update(measuredForce_);
+    if(forceFilter_) forceFilter_->update(measuredForce_);
   }
 
   /// compute amplified calibration matrixes (raw/amplifier gain/excitation)
@@ -330,7 +330,7 @@ private:
   Eigen::MatrixXd ampCalMat_;
   sva::ForceVecd measuredForce_ = sva::ForceVecd::Zero();
   std::unique_ptr<mc_filter::LowPass<sva::ForceVecd>> forceFilter_;
-  bool resetForceFilter_ = true;
+  bool resetForceFilter_ = false;
 
   // map of robot name to sensor name
   std::optional<UpdateRobotSensor> updateRobotSensor_ = std::nullopt;
