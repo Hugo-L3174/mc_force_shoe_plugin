@@ -11,7 +11,7 @@ void exit_on_error(XsensResultValue res, const std::string & comment)
 {
   if(res != XRV_OK)
   {
-    mc_rtc::log::error_and_throw("Error {} occurred in {}: {}\n", res, comment, xsensResultText(res));
+    mc_rtc::log::error_and_throw("Error {} occurred in {}: {}\n", static_cast<int>(res), comment, xsensResultText(res));
   }
 }
 
@@ -29,7 +29,13 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
   auto & ctl = controller.controller();
 
   // Loading plugin config from schema
+  mc_rtc::log::info("[ForceShoePlugin] Loading default plugin configuration");
   c_.load(config);
+  if(auto ctlPluginConfig = ctl.config().find("ForceShoePlugin"))
+  {
+    mc_rtc::log::info("[ForceShoePlugin] Loading additional configuration from controller config");
+    c_.load(*ctlPluginConfig);
+  }
   c_.addToGUI(*ctl.gui(), {"Plugins", "ForceShoePlugin", "Plugin Configuration"}, "Configure");
 
   cmt3_.reset(new xsens::Cmt3);
@@ -150,7 +156,7 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
 
   CmtPortInfo current = {0, 0, 0, ""};
   current.m_baudrate = numericToRate(baudrate);
-  sprintf(current.m_portName, portName.c_str());
+  snprintf(current.m_portName, sizeof(current.m_portName), "%s", portName.c_str());
 
   mc_rtc::log::info("Using COM port {} at {} baud", current.m_portName, current.m_baudrate);
   mc_rtc::log::info("Opening port...");
