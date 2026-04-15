@@ -132,7 +132,13 @@ struct ForceShoePluginSchema
                        "calibration file",
                        mc_rtc::schema::None,
                        "/tmp/force-shoe-calib.yaml")
-  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema, bool, liveMode, "by default, live reading", mc_rtc::schema::None, true)
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema, bool, liveMode, "liveMode", mc_rtc::schema::None, true)
+  MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
+                       bool,
+                       allowCommunicationFailure,
+                       "allowCommunicationFailure",
+                       mc_rtc::schema::None,
+                       true)
   MC_RTC_SCHEMA_MEMBER(ForceShoePluginSchema,
                        unsigned int,
                        calibrationSamples,

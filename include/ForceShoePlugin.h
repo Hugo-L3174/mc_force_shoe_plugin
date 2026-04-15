@@ -23,7 +23,7 @@ namespace mc_force_shoe_plugin
 /**
  * @brief tests for an error and exits the program with a message if there was one
  */
-void exit_on_error(XsensResultValue res, const std::string & comment);
+bool check_error(XsensResultValue res, const std::string & comment);
 
 struct ForceShoeSensor
 {
@@ -365,11 +365,11 @@ struct ForceShoePlugin : public mc_control::GlobalPlugin
   }
 
   /// Connects to the desired port at the desired baudrate and checks for
-  void doHardwareConnect(uint32_t baudrate, std::string portName);
+  bool doHardwareConnect(uint32_t baudrate, std::string portName);
 
   /// Set user settings in MTi/MTx
   /// Assumes initialized cmt3 class with open COM port
-  void doMtSettings();
+  bool doMtSettings();
 
   /// Convert the short raw value to the voltage in float.
   inline double shortToVolts(const uint16_t raw) const
