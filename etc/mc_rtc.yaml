@@ -1,0 +1,5 @@
+# Example configuration for the ForceShoePlugin.
+MainRobot: JVRC1
+Enabled: Posture
+IncludeHalfSitController: false
+Plugins: [ ForceShoePlugin ]

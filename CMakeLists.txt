@@ -14,6 +14,8 @@ endif()
 # Configure and install the plugin configuration
 configure_file(etc/ForceShoePlugin.in.yaml "${CMAKE_CURRENT_BINARY_DIR}/etc/ForceShoePlugin.yaml")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/etc/ForceShoePlugin.yaml" DESTINATION "${MC_PLUGINS_RUNTIME_INSTALL_PREFIX}/etc")
+install(FILES etc/mc_rtc.yaml DESTINATION "${MC_PLUGINS_RUNTIME_INSTALL_PREFIX}/etc")
+
 set(xsens_sdk_SRC
   src/xsens_sdk/cmt1.cpp
   src/xsens_sdk/cmt1.h
