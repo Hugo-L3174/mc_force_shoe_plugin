@@ -7,12 +7,14 @@
 namespace mc_force_shoe_plugin
 {
 
-void exit_on_error(XsensResultValue res, const std::string & comment)
+bool check_error(XsensResultValue res, const std::string & comment)
 {
   if(res != XRV_OK)
   {
-    mc_rtc::log::error_and_throw("Error {} occurred in {}: {}\n", static_cast<int>(res), comment, xsensResultText(res));
+    mc_rtc::log::error("Error {} occurred in {}: {}\n", static_cast<int>(res), comment, xsensResultText(res));
+    return true;
   }
+  return false;
 }
 
 ForceShoePlugin::~ForceShoePlugin()
@@ -49,11 +51,25 @@ void ForceShoePlugin::init(mc_control::MCGlobalController & controller, const mc
 
   if(c_.liveMode)
   {
-    doHardwareConnect(c_.baudRate, c_.comPort);
-    doMtSettings();
-
-    packet_.reset(new Packet((unsigned short)mtCount, cmt3_->isXm()));
-    th_ = std::thread([this]() { dataThread(); });
+    bool res = doHardwareConnect(c_.baudRate, c_.comPort);
+    res = res && doMtSettings();
+    if(res)
+    {
+      mc_rtc::log::success("[ForceShoePlugin] Successfully connected to hardware and started measurement");
+      packet_.reset(new Packet((unsigned short)mtCount, cmt3_->isXm()));
+      th_ = std::thread([this]() { dataThread(); });
+    }
+    else
+    {
+      if(c_.allowCommunicationFailure)
+      {
+        mc_rtc::log::warning("[ForceShoePlugin] Failed to connect to hardware, but allowCommunicationFailure is true");
+      }
+      else
+      {
+        throw std::runtime_error("[ForceShoePlugin] Failed to connect to hardware");
+      }
+    }
   }
   reset(controller);
 }
@@ -147,7 +163,7 @@ void ForceShoePlugin::loadCalibration()
   }
 }
 
-void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
+bool ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
 {
   XsensResultValue res;
   List<CmtPortInfo> portInfo;
@@ -163,14 +179,17 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
 
   // open the port which the device is connected to and connect at the device's baudrate.
   res = cmt3_->openPort(current.m_portName, current.m_baudrate);
-  exit_on_error(res, "cmtOpenPort");
+  if(check_error(res, "cmtOpenPort"))
+  {
+    return false;
+  }
 
   mc_rtc::log::info("done");
 
   // set the measurement timeout to 100ms (default is 16ms)
   int timeOut = 100;
   res = cmt3_->setTimeoutMeasurement(timeOut);
-  exit_on_error(res, "set measurement timeout");
+  if(check_error(res, "set measurement timeout")) return false;
   mc_rtc::log::info("Measurement timeout set to {} ms", timeOut);
 
   // get the Mt sensor count.
@@ -182,7 +201,7 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
   for(unsigned int j = 0; j < mtCount; j++)
   {
     res = cmt3_->getDeviceId((unsigned char)(j + 1), deviceIds_[j]);
-    exit_on_error(res, "getDeviceId");
+    if(check_error(res, "getDeviceId")) return false;
 
     // formats the argument as a hexadecimal (`x`), with at least 8 digits (`08`), padded with zeros if necessary.
     // This gives us the IMU id in the same format as what is written on the device.
@@ -212,13 +231,13 @@ void ForceShoePlugin::doHardwareConnect(uint32_t baudrate, std::string portName)
   loadCalibration();
 }
 
-void ForceShoePlugin::doMtSettings()
+bool ForceShoePlugin::doMtSettings()
 {
   XsensResultValue res;
 
   // set sensor to config sate
   res = cmt3_->gotoConfig();
-  exit_on_error(res, "gotoConfig");
+  if(check_error(res, "gotoConfig")) return false;
 
   unsigned short sampleFreq;
   sampleFreq = cmt3_->getSampleFrequency();
@@ -228,18 +247,17 @@ void ForceShoePlugin::doMtSettings()
   for(unsigned int i = 0; i < mtCount; i++)
   {
     res = cmt3_->setDeviceMode(deviceMode, true, deviceIds_[i]);
-    exit_on_error(res, "setDeviceMode");
+    if(check_error(res, "setDeviceMode")) return false;
   }
 
   // start receiving data
   res = cmt3_->gotoMeasurement();
-  exit_on_error(res, "gotoMeasurement");
+  if(check_error(res, "gotoMeasurement")) return false;
 }
 
 void ForceShoePlugin::dataThread()
 {
   Mode prevMode = mode_;
-  Eigen::Vector6d LBCalib, LFCalib, RBCalib, RFCalib = Eigen::Vector6d::Zero();
   while(th_running_)
   {
     auto res = cmt3_->waitForDataMessage(packet_.get());
